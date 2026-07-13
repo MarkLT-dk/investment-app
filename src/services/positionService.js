@@ -4,10 +4,8 @@ import { positions as mockPositions } from '../data/mockData'
 
 // Calculate net shares and avg cost per ticker from Firestore transactions (FIFO)
 export async function fetchPositions() {
-  const snap = await getDocs(
-    query(collection(db, 'transactions'), orderBy('date', 'asc'))
-  )
-  const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+  const snap = await getDocs(collection(db, 'transactions'))
+  const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date))
 
   // Group by ticker
   const byTicker = {}

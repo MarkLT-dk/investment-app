@@ -5,13 +5,10 @@ import {
 
 // FIFO: calculate realized P&L for a new sell against existing buy lots
 async function calcFifoRealizedPnl(ticker, sellShares, sellPriceDkk, sellFeeDkk) {
-  const [buySnap, sellSnap] = await Promise.all([
-    getDocs(query(collection(db, 'transactions'), where('ticker', '==', ticker), where('type', '==', 'BUY'), orderBy('date', 'asc'))),
-    getDocs(query(collection(db, 'transactions'), where('ticker', '==', ticker), where('type', '==', 'SELL'), orderBy('date', 'asc'))),
-  ])
-
-  const buys = buySnap.docs.map(d => ({ id: d.id, ...d.data() }))
-  const prevSells = sellSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+  const snap = await getDocs(query(collection(db, 'transactions'), where('ticker', '==', ticker)))
+  const all  = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date))
+  const buys      = all.filter(t => t.type === 'BUY')
+  const prevSells = all.filter(t => t.type === 'SELL')
 
   // Track shares remaining in each buy lot after prior sells
   const remaining = Object.fromEntries(buys.map(b => [b.id, b.shares]))
@@ -69,9 +66,9 @@ export async function addCashTransaction(data) {
 
 export async function fetchAllEntries() {
   const [txSnap, divSnap, cashSnap] = await Promise.all([
-    getDocs(query(collection(db, 'transactions'), orderBy('date', 'desc'))),
-    getDocs(query(collection(db, 'dividends'), orderBy('date', 'desc'))),
-    getDocs(query(collection(db, 'cashTransactions'), orderBy('date', 'desc'))),
+    getDocs(collection(db, 'transactions')),
+    getDocs(collection(db, 'dividends')),
+    getDocs(collection(db, 'cashTransactions')),
   ])
   return {
     transactions: txSnap.docs.map(d => ({ id: d.id, ...d.data() })),
