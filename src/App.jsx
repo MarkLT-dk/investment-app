@@ -7,22 +7,25 @@ import AnalyticsPage from './pages/AnalyticsPage'
 import WatchlistPage from './pages/WatchlistPage'
 import DiscoverPage from './pages/DiscoverPage'
 import ResearchPage from './pages/ResearchPage'
+import TransactionsPage from './pages/TransactionsPage'
 import logo from './assets/logo.png'
 
 const tabs = [
-  { id: 'portfolio', label: 'Portfolio' },
-  { id: 'analytics', label: 'Analytics' },
-  { id: 'watchlist', label: 'Watchlist' },
-  { id: 'discover',  label: 'Discover' },
-  { id: 'research',  label: 'Research' },
+  { id: 'portfolio',    label: 'Portfolio'     },
+  { id: 'analytics',   label: 'Analytics'     },
+  { id: 'watchlist',   label: 'Watchlist'     },
+  { id: 'discover',    label: 'Discover'      },
+  { id: 'research',    label: 'Research'      },
+  { id: 'transactions', label: 'Transactions' },
 ]
 
 const pages = {
-  portfolio: <PortfolioPage />,
-  analytics: <AnalyticsPage />,
-  watchlist: <WatchlistPage />,
-  discover:  <DiscoverPage />,
-  research:  <ResearchPage />,
+  portfolio:    <PortfolioPage />,
+  analytics:    <AnalyticsPage />,
+  watchlist:    <WatchlistPage />,
+  discover:     <DiscoverPage />,
+  research:     <ResearchPage />,
+  transactions: <TransactionsPage />,
 }
 
 function TabBar({ active, onChange }) {
