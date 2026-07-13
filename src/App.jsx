@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ToastProvider } from './components/Toast'
 import { ThemeProvider, ThemeToggle } from './components/Theme'
 import NotificationCenter from './components/NotificationCenter'
+import { signOutUser } from './components/Auth'
+import { LogOut } from 'lucide-react'
 import PortfolioPage from './pages/PortfolioPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import WatchlistPage from './pages/WatchlistPage'
@@ -93,6 +95,13 @@ export default function App() {
               </span>
               <ThemeToggle />
               <NotificationCenter />
+              <button
+                onClick={signOutUser}
+                aria-label="Sign out"
+                className="flex items-center justify-center w-7 h-7 rounded-md text-muted hover:text-ink hover:bg-surface-2 transition-colors"
+              >
+                <LogOut size={14} />
+              </button>
             </div>
           </div>
 
