@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Card, CardTitle, PageTitle, StatCard, Badge, InsightCallout, AnimatedNumber, pnlColor, pnlSign } from '../components/Card'
-import { positions, portfolioStats, portfolioHistory, returnHistory, distribution } from '../data/mockData'
+import { positions as mockPositions, portfolioStats, portfolioHistory, returnHistory, distribution } from '../data/mockData'
+import { fetchPositions } from '../services/positionService'
 import { Wallet, TrendingUp, TrendingDown, ShieldAlert, SlidersHorizontal, Sparkles, Star } from 'lucide-react'
 
 const fmt = (n) => n?.toLocaleString('da-DK', { maximumFractionDigits: 0 }) ?? '—'
@@ -156,7 +157,14 @@ function KpiSettings({ visible, setVisible }) {
 
 export default function PortfolioPage() {
   const [period, setPeriod] = useState(PERIODS[2]) // default 6M
+  const [positions, setPositions] = useState(mockPositions)
   const s = portfolioStats
+
+  useEffect(() => {
+    fetchPositions()
+      .then(p => { if (p.length > 0) setPositions(p) })
+      .catch(() => {}) // fall back to mockData on error
+  }, [])
   const [visibleKpi, setVisibleKpi] = useKpiVisibility()
   const [pinned, setPinned] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('pinnedHoldings')) || []) } catch { return new Set() }

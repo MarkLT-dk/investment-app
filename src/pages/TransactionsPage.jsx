@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowDownLeft, ArrowUpRight, Coins, Plus, Wallet, TrendingUp, X } from 'lucide-react'
 import { Card, CardTitle, PageTitle, StatCard, Badge, EmptyState, pnlColor, pnlSign } from '../components/Card'
-import { addTransaction, addDividend, addCashTransaction, fetchAllEntries } from '../services/transactionService'
+import { addTransaction, addDividend, addCashTransaction, fetchAllEntries, seedHistoricalData } from '../services/transactionService'
 
 const fmt    = n => n?.toLocaleString('da-DK', { maximumFractionDigits: 0 }) ?? '—'
 const fmtDec = n => n?.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'
@@ -273,6 +273,8 @@ export default function TransactionsPage() {
   const [filter, setFilter]       = useState('All')
   const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [seeding, setSeeding]     = useState(false)
+  const [seeded, setSeeded]       = useState(() => localStorage.getItem('historicalSeeded') === 'true')
 
   async function load() {
     setLoading(true)
@@ -284,6 +286,16 @@ export default function TransactionsPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  async function handleSeed() {
+    if (!window.confirm('This will upload your 19 historical transactions. Only do this once. Continue?')) return
+    setSeeding(true)
+    await seedHistoricalData()
+    localStorage.setItem('historicalSeeded', 'true')
+    setSeeded(true)
+    await load()
+    setSeeding(false)
+  }
 
   // Summary stats
   const transactions = entries.filter(e => e.type === 'BUY' || e.type === 'SELL')
@@ -302,15 +314,26 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-3">
         <PageTitle sub="All your buys, sells, dividends, and cash movements">Transactions</PageTitle>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 transition-colors flex-shrink-0"
-        >
-          <Plus size={14} />
-          Add
-        </button>
+        <div className="flex gap-2 flex-shrink-0">
+          {!seeded && (
+            <button
+              onClick={handleSeed}
+              disabled={seeding}
+              className="px-3.5 py-2 rounded-lg bg-surface border border-border text-sm text-muted hover:text-ink transition-colors disabled:opacity-50"
+            >
+              {seeding ? 'Importing…' : 'Import history'}
+            </button>
+          )}
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 transition-colors"
+          >
+            <Plus size={14} />
+            Add
+          </button>
+        </div>
       </div>
 
       {/* Summary */}
