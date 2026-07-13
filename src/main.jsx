@@ -6,8 +6,12 @@ import { useAuth, LoginScreen } from './components/Auth.jsx'
 
 function Root() {
   const { user, loading } = useAuth()
-  if (loading) return null
-  if (!user)   return <LoginScreen />
+  if (loading) return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="w-6 h-6 rounded-full border-2 border-border border-t-blue-400 animate-spin" />
+    </div>
+  )
+  if (!user) return <LoginScreen />
   return <App />
 }
 
