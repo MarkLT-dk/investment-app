@@ -1,13 +1,29 @@
 import { db } from '../firebase'
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore'
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
 import { positions as mockPositions } from '../data/mockData'
 
-// Calculate net shares and avg cost per ticker from Firestore transactions (FIFO)
+// Calculate net shares and avg cost per ticker from Firestore transactions (FIFO),
+// then merge with live market prices from the Python pipeline sync.
 export async function fetchPositions() {
-  const snap = await getDocs(collection(db, 'transactions'))
-  const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date))
+  const [txSnap, priceSnap, metaSnap] = await Promise.all([
+    getDocs(collection(db, 'transactions')),
+    getDocs(collection(db, 'marketPrices')),
+    getDocs(collection(db, 'dimTicker')),
+  ])
 
-  // Group by ticker
+  const transactions = txSnap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  // Build live price map: ticker → { currentPriceDkk, currency, ... }
+  const livePrices = {}
+  priceSnap.docs.forEach(d => { livePrices[d.id] = d.data() })
+
+  // Build metadata map: ticker → { name, sector, country, ... }
+  const tickerMeta = {}
+  metaSnap.docs.forEach(d => { tickerMeta[d.id] = d.data() })
+
+  // Group transactions by ticker
   const byTicker = {}
   for (const tx of transactions) {
     if (!byTicker[tx.ticker]) byTicker[tx.ticker] = { buys: [], sells: [] }
@@ -45,26 +61,46 @@ export async function fetchPositions() {
 
     const avgCostDkk = totalCost / netShares
 
-    // Merge with mockData for live price, returns, metadata
+    // Prefer live price from pipeline; fall back to mock if pipeline hasn't run yet
+    const live = livePrices[ticker]
     const mock = mockPositions.find(p => p.ticker === ticker)
-    if (!mock) continue
+    const meta = tickerMeta[ticker] || {}
 
-    // Scale current value by share ratio (until we have live prices)
-    const sharesRatio = netShares / mock.shares
-    const currentValueDkk   = Math.round(mock.currentValueDkk * sharesRatio)
-    const unrealizedPnlDkk  = Math.round(currentValueDkk - totalCost)
-    const unrealizedPnlPct  = ((currentValueDkk - totalCost) / totalCost) * 100
+    let currentPriceDkk, currentValueDkk, unrealizedPnlDkk, unrealizedPnlPct
+
+    if (live?.currentPriceDkk) {
+      currentPriceDkk  = live.currentPriceDkk
+      currentValueDkk  = Math.round(netShares * currentPriceDkk)
+      unrealizedPnlDkk = Math.round(currentValueDkk - totalCost)
+      unrealizedPnlPct = Math.round(((currentValueDkk - totalCost) / totalCost) * 1000) / 10
+    } else if (mock) {
+      // Fallback: scale mock price by shares ratio until pipeline runs
+      const sharesRatio = netShares / mock.shares
+      currentValueDkk  = Math.round(mock.currentValueDkk * sharesRatio)
+      currentPriceDkk  = mock.currentValueDkk / mock.shares
+      unrealizedPnlDkk = Math.round(currentValueDkk - totalCost)
+      unrealizedPnlPct = Math.round(((currentValueDkk - totalCost) / totalCost) * 1000) / 10
+    } else {
+      continue
+    }
 
     positions.push({
-      ...mock,
-      shares: netShares,
-      avgCostDkk: Math.round(avgCostDkk * 100) / 100,
+      ticker,
+      name:            meta.name            || mock?.name            || ticker,
+      sector:          meta.sector          || mock?.sector          || '',
+      country:         meta.country         || mock?.country         || '',
+      currency:        live?.currency       || mock?.currency        || 'DKK',
+      investmentType:  meta.investmentType  || mock?.investmentType  || 'Stock',
+      shares:          netShares,
+      avgCostDkk:      Math.round(avgCostDkk * 100) / 100,
+      currentPriceDkk: Math.round(currentPriceDkk * 100) / 100,
       currentValueDkk,
       unrealizedPnlDkk,
-      unrealizedPnlPct: Math.round(unrealizedPnlPct * 10) / 10,
-      weight: mock.weight * sharesRatio,
+      unrealizedPnlPct,
+      dataSource:      live ? 'live' : 'mock',
     })
   }
 
-  return positions
+  // Sort by current value descending
+  return positions.sort((a, b) => b.currentValueDkk - a.currentValueDkk)
 }

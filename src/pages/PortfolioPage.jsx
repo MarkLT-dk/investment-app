@@ -3,6 +3,8 @@ import { AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, To
 import { Card, CardTitle, PageTitle, StatCard, Badge, InsightCallout, AnimatedNumber, pnlColor, pnlSign } from '../components/Card'
 import { positions as mockPositions, portfolioStats, portfolioHistory, returnHistory, distribution } from '../data/mockData'
 import { fetchPositions } from '../services/positionService'
+import { db } from '../firebase'
+import { doc, getDoc } from 'firebase/firestore'
 import { Wallet, TrendingUp, TrendingDown, ShieldAlert, SlidersHorizontal, Sparkles, Star } from 'lucide-react'
 
 const fmt = (n) => n?.toLocaleString('da-DK', { maximumFractionDigits: 0 }) ?? '—'
@@ -155,16 +157,41 @@ function KpiSettings({ visible, setVisible }) {
   )
 }
 
+// Return % between two entries in the history array
+function retSince(data, cutoffStr) {
+  if (!data?.length) return null
+  const last = data[data.length - 1]
+  const entry = [...data].reverse().find(d => d.date <= cutoffStr)
+  return entry && entry !== last ? (last.value / entry.value - 1) * 100 : null
+}
+function benchRetSince(data, cutoffStr) {
+  if (!data?.length) return null
+  const last = data[data.length - 1]
+  if (!last.benchValue) return null
+  const entry = [...data].reverse().find(d => d.date <= cutoffStr && d.benchValue)
+  return entry && entry !== last ? (last.benchValue / entry.benchValue - 1) * 100 : null
+}
+function daysAgoCutoff(days) {
+  const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().slice(0, 10)
+}
+
 export default function PortfolioPage() {
   const [period, setPeriod] = useState(PERIODS[2]) // default 6M
   const [positions, setPositions] = useState(mockPositions)
-  const s = portfolioStats
+  const [historyData, setHistoryData] = useState(null)
 
   useEffect(() => {
     fetchPositions()
       .then(p => { if (p.length > 0) setPositions(p) })
-      .catch(() => {}) // fall back to mockData on error
+      .catch(() => {})
   }, [])
+
+  useEffect(() => {
+    getDoc(doc(db, 'portfolioHistory', 'series'))
+      .then(snap => { if (snap.exists()) setHistoryData(snap.data().data) })
+      .catch(() => {})
+  }, [])
+
   const [visibleKpi, setVisibleKpi] = useKpiVisibility()
   const [pinned, setPinned] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('pinnedHoldings')) || []) } catch { return new Set() }
@@ -182,11 +209,53 @@ export default function PortfolioPage() {
   const core = sortByPinned(positions.filter(p => p.category === 'Core'))
   const satellite = sortByPinned(positions.filter(p => p.category === 'Satellite'))
 
-  const sliceHistory = (data) => data.slice(Math.max(0, data.length - period.weeks))
+  // Compute live stats from positions + history; fall back to mock when not yet loaded
+  const liveTotal = positions !== mockPositions
+    ? positions.reduce((sum, p) => sum + (p.currentValueDkk || 0), 0)
+    : 0
+  const liveUnrealized = positions !== mockPositions
+    ? positions.reduce((sum, p) => sum + (p.unrealizedPnlDkk || 0), 0)
+    : 0
+  const thisYear = new Date().getFullYear()
 
-  const filteredValue = sliceHistory(portfolioHistory)
-  const filteredReturn = sliceHistory(returnHistory)
-  const sparkValues = portfolioHistory.slice(-14).map(p => p.value)
+  const s = {
+    ...portfolioStats,
+    totalValueDkk:      liveTotal      || portfolioStats.totalValueDkk,
+    totalUnrealizedDkk: liveUnrealized || portfolioStats.totalUnrealizedDkk,
+    return1d:    retSince(historyData, daysAgoCutoff(1))   ?? portfolioStats.return1d,
+    return1m:    retSince(historyData, daysAgoCutoff(30))  ?? portfolioStats.return1m,
+    returnYtd:   retSince(historyData, `${thisYear}-01-01`) ?? portfolioStats.returnYtd,
+    return1y:    retSince(historyData, daysAgoCutoff(365)) ?? portfolioStats.return1y,
+    marketReturn1d:  benchRetSince(historyData, daysAgoCutoff(1))   ?? portfolioStats.marketReturn1d,
+    marketReturn1m:  benchRetSince(historyData, daysAgoCutoff(30))  ?? portfolioStats.marketReturn1m,
+    marketReturnYtd: benchRetSince(historyData, `${thisYear}-01-01`) ?? portfolioStats.marketReturnYtd,
+    marketReturn1y:  benchRetSince(historyData, daysAgoCutoff(365)) ?? portfolioStats.marketReturn1y,
+  }
+
+  // Period-filtered chart data — uses live history when available, mock otherwise
+  const cutoffDate = period.label === 'All' ? null : daysAgoCutoff(period.weeks * 7)
+  const chartData = historyData
+    ? (cutoffDate ? historyData.filter(d => d.date >= cutoffDate) : historyData)
+    : null
+
+  const filteredValue = chartData
+    ? chartData.map(d => ({ date: d.label, value: d.value }))
+    : portfolioHistory.slice(Math.max(0, portfolioHistory.length - period.weeks))
+
+  const filteredReturn = chartData?.length
+    ? (() => {
+        const base = chartData[0]
+        return chartData.map(d => ({
+          date: d.label,
+          portfolio: base.value ? (d.value / base.value - 1) : 0,
+          market: (base.benchValue && d.benchValue) ? (d.benchValue / base.benchValue - 1) : 0,
+        }))
+      })()
+    : returnHistory.slice(Math.max(0, returnHistory.length - period.weeks))
+
+  const sparkValues = historyData
+    ? historyData.slice(-14).map(d => d.value)
+    : portfolioHistory.slice(-14).map(p => p.value)
 
   const liveValue = useLiveJitter(s.totalValueDkk)
   const liveToday = useLiveJitter(s.return1d, { amplitude: 0.02 })
@@ -196,9 +265,9 @@ export default function PortfolioPage() {
     : filteredValue.length <= 16 ? 1
     : Math.floor(filteredValue.length / 6)
 
-  // Auto-generated insight: biggest driver of over/under-performance vs market
-  const worstPerformer = [...positions].sort((a, b) => a.return1y - b.return1y)[0]
-  const bestPerformer = [...positions].sort((a, b) => b.return1y - a.return1y)[0]
+  // Auto-generated insight
+  const worstPerformer = [...positions].sort((a, b) => (a.return1y ?? 0) - (b.return1y ?? 0))[0]
+  const bestPerformer  = [...positions].sort((a, b) => (b.return1y ?? 0) - (a.return1y ?? 0))[0]
   const vsMarket1y = s.return1y - s.marketReturn1y
 
   return (
