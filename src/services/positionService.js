@@ -1,29 +1,28 @@
 import { db } from '../firebase'
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore'
+import { collection, getDocs } from 'firebase/firestore'
 import { positions as mockPositions } from '../data/mockData'
 
-// Calculate net shares and avg cost per ticker from Firestore transactions (FIFO),
-// then merge with live market prices from the Python pipeline sync.
 export async function fetchPositions() {
-  const [txSnap, priceSnap, metaSnap] = await Promise.all([
+  const [txSnap, priceSnap, metaSnap, summarySnap] = await Promise.all([
     getDocs(collection(db, 'transactions')),
     getDocs(collection(db, 'marketPrices')),
     getDocs(collection(db, 'dimTicker')),
+    getDocs(collection(db, 'tickerSummary')),
   ])
 
   const transactions = txSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
     .sort((a, b) => a.date.localeCompare(b.date))
 
-  // Build live price map: ticker → { currentPriceDkk, currency, ... }
   const livePrices = {}
   priceSnap.docs.forEach(d => { livePrices[d.id] = d.data() })
 
-  // Build metadata map: ticker → { name, sector, country, ... }
   const tickerMeta = {}
   metaSnap.docs.forEach(d => { tickerMeta[d.id] = d.data() })
 
-  // Group transactions by ticker
+  const tickerSummary = {}
+  summarySnap.docs.forEach(d => { tickerSummary[d.id] = d.data() })
+
   const byTicker = {}
   for (const tx of transactions) {
     if (!byTicker[tx.ticker]) byTicker[tx.ticker] = { buys: [], sells: [] }
@@ -34,7 +33,6 @@ export async function fetchPositions() {
   const positions = []
 
   for (const [ticker, { buys, sells }] of Object.entries(byTicker)) {
-    // Track remaining shares in each buy lot after sells (FIFO)
     const remaining = Object.fromEntries(buys.map(b => [b.id, b.shares]))
     for (const sell of sells) {
       let toConsume = sell.shares
@@ -46,9 +44,8 @@ export async function fetchPositions() {
       }
     }
 
-    // Sum remaining lots → net shares + cost basis
     let netShares = 0
-    let totalCost = 0
+    let totalCost  = 0
     for (const b of buys) {
       const rem = remaining[b.id] ?? 0
       if (rem <= 0) continue
@@ -60,11 +57,10 @@ export async function fetchPositions() {
     if (netShares <= 0) continue
 
     const avgCostDkk = totalCost / netShares
-
-    // Prefer live price from pipeline; fall back to mock if pipeline hasn't run yet
-    const live = livePrices[ticker]
-    const mock = mockPositions.find(p => p.ticker === ticker)
-    const meta = tickerMeta[ticker] || {}
+    const live  = livePrices[ticker]
+    const mock  = mockPositions.find(p => p.ticker === ticker)
+    const meta  = tickerMeta[ticker] || {}
+    const summ  = tickerSummary[ticker] || {}
 
     let currentPriceDkk, currentValueDkk, unrealizedPnlDkk, unrealizedPnlPct
 
@@ -74,7 +70,6 @@ export async function fetchPositions() {
       unrealizedPnlDkk = Math.round(currentValueDkk - totalCost)
       unrealizedPnlPct = Math.round(((currentValueDkk - totalCost) / totalCost) * 1000) / 10
     } else if (mock) {
-      // Fallback: scale mock price by shares ratio until pipeline runs
       const sharesRatio = netShares / mock.shares
       currentValueDkk  = Math.round(mock.currentValueDkk * sharesRatio)
       currentPriceDkk  = mock.currentValueDkk / mock.shares
@@ -99,10 +94,18 @@ export async function fetchPositions() {
       currentValueDkk,
       unrealizedPnlDkk,
       unrealizedPnlPct,
-      dataSource:      live ? 'live' : 'mock',
+      // Period returns — live from tickerSummary, fall back to mock
+      return1d:   summ.return1d   ?? mock?.return1d   ?? null,
+      return1m:   summ.return1m   ?? mock?.return1m   ?? null,
+      returnYtd:  summ.returnYtd  ?? mock?.returnYtd  ?? null,
+      return1y:   summ.return1y   ?? mock?.return1y   ?? null,
+      dataSource: live ? 'live' : 'mock',
     })
   }
 
-  // Sort by current value descending
-  return positions.sort((a, b) => b.currentValueDkk - a.currentValueDkk)
+  // Compute portfolio weights after all positions are known
+  const totalValue = positions.reduce((s, p) => s + p.currentValueDkk, 0)
+  return positions
+    .map(p => ({ ...p, weight: totalValue > 0 ? p.currentValueDkk / totalValue : 0 }))
+    .sort((a, b) => b.currentValueDkk - a.currentValueDkk)
 }

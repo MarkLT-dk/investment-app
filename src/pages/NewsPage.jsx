@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Card, CardTitle, PageTitle, EmptyState } from '../components/Card'
+import { useToast } from '../components/Toast'
 import { fetchNews } from '../services/newsService'
-import { ExternalLink, Rss } from 'lucide-react'
+import { fetchSavedArticles, saveArticle, deleteSavedArticle } from '../services/savedArticlesService'
+import { ExternalLink, Rss, Bookmark, BookmarkCheck } from 'lucide-react'
 
 function relativeTime(published) {
   if (!published) return ''
@@ -16,15 +18,59 @@ function relativeTime(published) {
 }
 
 export default function NewsPage() {
-  const [allNews, setAllNews]       = useState([])
-  const [ticker, setTicker]         = useState('all')
-  const [loading, setLoading]       = useState(true)
+  const [allNews, setAllNews]   = useState([])
+  const [ticker, setTicker]     = useState('all')
+  const [loading, setLoading]   = useState(true)
+  const [savedMap, setSavedMap] = useState({})  // url → savedArticle.id
+  const showToast = useToast()
 
   useEffect(() => {
     fetchNews()
       .then(items => { setAllNews(items); setLoading(false) })
       .catch(() => setLoading(false))
+    loadSaved()
   }, [])
+
+  async function loadSaved() {
+    try {
+      const articles = await fetchSavedArticles()
+      const map = {}
+      for (const a of articles) {
+        if (a.url) map[a.url] = a.id
+      }
+      setSavedMap(map)
+    } catch {}
+  }
+
+  async function handleBookmark(item) {
+    if (!item.url) return
+    if (savedMap[item.url]) {
+      // Already saved — remove
+      try {
+        await deleteSavedArticle(savedMap[item.url])
+        setSavedMap(m => { const next = { ...m }; delete next[item.url]; return next })
+        showToast('Removed from research')
+      } catch {
+        showToast('Could not remove — try again')
+      }
+    } else {
+      // Save
+      try {
+        const doc = await saveArticle({
+          type:      'article',
+          url:       item.url,
+          headline:  item.headline,
+          tickers:   item.ticker ? [item.ticker] : [],
+          source:    item.source || '',
+          published: item.published || '',
+        })
+        setSavedMap(m => ({ ...m, [item.url]: doc.id }))
+        showToast('Saved to your research')
+      } catch {
+        showToast('Failed to save — try again')
+      }
+    }
+  }
 
   const tickers = ['all', ...Array.from(new Set(allNews.map(n => n.ticker))).sort()]
   const filtered = ticker === 'all' ? allNews : allNews.filter(n => n.ticker === ticker)
@@ -69,46 +115,63 @@ export default function NewsPage() {
 
         {!loading && filtered.length > 0 && (
           <div className="divide-y divide-border -mx-4 sm:-mx-5 px-4 sm:px-5">
-            {filtered.map((item, i) => (
-              <div key={i} className="flex items-start gap-3 py-3 hover:bg-surface-2 -mx-4 sm:-mx-5 px-4 sm:px-5 transition-colors">
-                {/* Ticker badge */}
-                <span className="flex-shrink-0 mt-0.5 font-mono text-[10px] font-bold text-blue-300 bg-blue-950/60 px-1.5 py-0.5 rounded w-20 text-center truncate">
-                  {item.ticker}
-                </span>
+            {filtered.map((item, i) => {
+              const isSaved = item.url && !!savedMap[item.url]
+              return (
+                <div key={i} className="flex items-start gap-3 py-3 hover:bg-surface-2 -mx-4 sm:-mx-5 px-4 sm:px-5 transition-colors">
+                  {/* Ticker badge */}
+                  <span className="flex-shrink-0 mt-0.5 font-mono text-[10px] font-bold text-blue-300 bg-blue-950/60 px-1.5 py-0.5 rounded w-20 text-center truncate">
+                    {item.ticker}
+                  </span>
 
-                {/* Headline + meta */}
-                <div className="flex-1 min-w-0">
-                  {item.url ? (
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-ink2 leading-snug hover:text-blue-300 transition-colors line-clamp-2"
-                    >
-                      {item.headline}
-                    </a>
-                  ) : (
-                    <p className="text-xs text-ink2 leading-snug line-clamp-2">{item.headline}</p>
-                  )}
-                  <p className="text-[11px] text-muted mt-0.5">
-                    {item.source}{item.source && item.published ? ' · ' : ''}{relativeTime(item.published)}
-                  </p>
+                  {/* Headline + meta */}
+                  <div className="flex-1 min-w-0">
+                    {item.url ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-ink2 leading-snug hover:text-blue-300 transition-colors line-clamp-2"
+                      >
+                        {item.headline}
+                      </a>
+                    ) : (
+                      <p className="text-xs text-ink2 leading-snug line-clamp-2">{item.headline}</p>
+                    )}
+                    <p className="text-[11px] text-muted mt-0.5">
+                      {item.source}{item.source && item.published ? ' · ' : ''}{relativeTime(item.published)}
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                    {item.url && (
+                      <button
+                        onClick={() => handleBookmark(item)}
+                        title={isSaved ? 'Remove from research' : 'Save to research'}
+                        className="p-1 rounded hover:bg-surface-2 transition-colors"
+                      >
+                        {isSaved
+                          ? <BookmarkCheck size={13} className="text-blue-400" />
+                          : <Bookmark size={13} className="text-muted hover:text-blue-400 transition-colors" />
+                        }
+                      </button>
+                    )}
+                    {item.url && (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1 rounded hover:bg-surface-2 text-muted hover:text-blue-300 transition-colors"
+                        tabIndex={-1}
+                      >
+                        <ExternalLink size={12} />
+                      </a>
+                    )}
+                  </div>
                 </div>
-
-                {/* External link icon */}
-                {item.url && (
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-shrink-0 mt-0.5 text-muted hover:text-blue-300 transition-colors"
-                    tabIndex={-1}
-                  >
-                    <ExternalLink size={12} />
-                  </a>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </Card>

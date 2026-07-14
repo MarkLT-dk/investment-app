@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Card, CardTitle, PageTitle, StatCard, Badge, InsightCallout, AnimatedNumber, pnlColor, pnlSign } from '../components/Card'
-import { positions as mockPositions, portfolioStats, portfolioHistory, returnHistory, distribution } from '../data/mockData'
+import { positions as mockPositions, portfolioStats, portfolioHistory, returnHistory, distribution as mockDistribution } from '../data/mockData'
 import { fetchPositions } from '../services/positionService'
 import { db } from '../firebase'
 import { doc, getDoc } from 'firebase/firestore'
@@ -175,6 +175,41 @@ function daysAgoCutoff(days) {
   const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().slice(0, 10)
 }
 
+// Compute country/sector distribution from live positions
+function computeDistribution(positions, key) {
+  const COLORS = {
+    // Countries
+    Denmark: '#3b82f6', Sweden: '#a855f7', USA: '#f97316',
+    Netherlands: '#22c55e', Germany: '#fbbf24',
+    // Sectors
+    Healthcare: '#ec4899', 'Consumer Cyclical': '#3b82f6',
+    'Consumer Defensive': '#60a5fa', Industrials: '#f97316',
+    Technology: '#a855f7', ETF: '#22c55e', Energy: '#fbbf24',
+  }
+  const total = positions.reduce((s, p) => s + (p.currentValueDkk || 0), 0)
+  if (!total) return []
+  const groups = {}
+  for (const p of positions) {
+    const label = (p[key] || '').trim() || 'Other'
+    groups[label] = (groups[label] || 0) + (p.currentValueDkk || 0)
+  }
+  return Object.entries(groups)
+    .map(([label, value]) => ({ label, pct: Math.round(value / total * 100), color: COLORS[label] || '#64748b' }))
+    .sort((a, b) => b.pct - a.pct)
+}
+
+// Compute max drawdown from a portfolio value series
+function computeMaxDrawdown(data) {
+  if (!data?.length) return null
+  let peak = -Infinity, maxDD = 0
+  for (const { value } of data) {
+    if (value > peak) peak = value
+    const dd = peak > 0 ? ((value - peak) / peak) * 100 : 0
+    if (dd < maxDD) maxDD = dd
+  }
+  return Math.round(maxDD * 10) / 10
+}
+
 export default function PortfolioPage() {
   const [period, setPeriod] = useState(PERIODS[2]) // default 6M
   const [positions, setPositions] = useState(mockPositions)
@@ -218,19 +253,26 @@ export default function PortfolioPage() {
     : 0
   const thisYear = new Date().getFullYear()
 
+  const liveMaxDrawdown = computeMaxDrawdown(historyData)
+
   const s = {
     ...portfolioStats,
     totalValueDkk:      liveTotal      || portfolioStats.totalValueDkk,
     totalUnrealizedDkk: liveUnrealized || portfolioStats.totalUnrealizedDkk,
-    return1d:    retSince(historyData, daysAgoCutoff(1))   ?? portfolioStats.return1d,
-    return1m:    retSince(historyData, daysAgoCutoff(30))  ?? portfolioStats.return1m,
+    return1d:    retSince(historyData, daysAgoCutoff(1))    ?? portfolioStats.return1d,
+    return1m:    retSince(historyData, daysAgoCutoff(30))   ?? portfolioStats.return1m,
     returnYtd:   retSince(historyData, `${thisYear}-01-01`) ?? portfolioStats.returnYtd,
-    return1y:    retSince(historyData, daysAgoCutoff(365)) ?? portfolioStats.return1y,
-    marketReturn1d:  benchRetSince(historyData, daysAgoCutoff(1))   ?? portfolioStats.marketReturn1d,
-    marketReturn1m:  benchRetSince(historyData, daysAgoCutoff(30))  ?? portfolioStats.marketReturn1m,
+    return1y:    retSince(historyData, daysAgoCutoff(365))  ?? portfolioStats.return1y,
+    marketReturn1d:  benchRetSince(historyData, daysAgoCutoff(1))    ?? portfolioStats.marketReturn1d,
+    marketReturn1m:  benchRetSince(historyData, daysAgoCutoff(30))   ?? portfolioStats.marketReturn1m,
     marketReturnYtd: benchRetSince(historyData, `${thisYear}-01-01`) ?? portfolioStats.marketReturnYtd,
-    marketReturn1y:  benchRetSince(historyData, daysAgoCutoff(365)) ?? portfolioStats.marketReturn1y,
+    marketReturn1y:  benchRetSince(historyData, daysAgoCutoff(365))  ?? portfolioStats.marketReturn1y,
+    maxDrawdown: liveMaxDrawdown ?? portfolioStats.maxDrawdown,
   }
+
+  const isLivePositions = positions !== mockPositions
+  const byCountry = isLivePositions ? computeDistribution(positions, 'country') : mockDistribution.byCountry
+  const bySector  = isLivePositions ? computeDistribution(positions, 'sector')  : mockDistribution.bySector
 
   // Period-filtered chart data — uses live history when available, mock otherwise
   const cutoffDate = period.label === 'All' ? null : daysAgoCutoff(period.weeks * 7)
@@ -416,11 +458,11 @@ export default function PortfolioPage() {
         <div className="space-y-3 sm:space-y-4">
           <Card>
             <CardTitle>By Country</CardTitle>
-            <DonutChart data={distribution.byCountry} />
+            <DonutChart data={byCountry} />
           </Card>
           <Card>
             <CardTitle>By Sector</CardTitle>
-            <DonutChart data={distribution.bySector} />
+            <DonutChart data={bySector} />
           </Card>
         </div>
       </div>
