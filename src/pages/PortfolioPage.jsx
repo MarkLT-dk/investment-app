@@ -325,11 +325,13 @@ export default function PortfolioPage() {
       </div>
 
       {/* Insight callout */}
-      <InsightCallout icon={Sparkles}>
-        Your portfolio {vsMarket1y >= 0 ? 'beat' : 'trailed'} the market by {Math.abs(vsMarket1y).toFixed(1)}pp over 1 year.{' '}
-        <span className="text-ink font-medium">{bestPerformer.name}</span> was your top performer ({pnlSign(bestPerformer.return1y)}{bestPerformer.return1y.toFixed(1)}%),
-        while <span className="text-ink font-medium">{worstPerformer.name}</span> was the biggest drag ({pnlSign(worstPerformer.return1y)}{worstPerformer.return1y.toFixed(1)}%).
-      </InsightCallout>
+      {isFinite(vsMarket1y) && bestPerformer?.return1y != null && worstPerformer?.return1y != null && (
+        <InsightCallout icon={Sparkles}>
+          Your portfolio {vsMarket1y >= 0 ? 'beat' : 'trailed'} the market by {Math.abs(vsMarket1y).toFixed(1)}pp over 1 year.{' '}
+          <span className="text-ink font-medium">{bestPerformer.name}</span> was your top performer ({pnlSign(bestPerformer.return1y)}{bestPerformer.return1y.toFixed(1)}%),
+          while <span className="text-ink font-medium">{worstPerformer.name}</span> was the biggest drag ({pnlSign(worstPerformer.return1y)}{worstPerformer.return1y.toFixed(1)}%).
+        </InsightCallout>
+      )}
 
       {/* Returns table */}
       <Card>
