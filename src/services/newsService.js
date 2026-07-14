@@ -1,5 +1,5 @@
 import { db } from '../firebase'
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore'
+import { collection, getDocs } from 'firebase/firestore'
 import { news as mockNews } from '../data/mockData'
 
 function normalize(item) {
@@ -14,10 +14,10 @@ function normalize(item) {
 
 export async function fetchNews() {
   try {
-    const q = query(collection(db, 'news'), orderBy('published', 'desc'), limit(300))
-    const snap = await getDocs(q)
+    const snap = await getDocs(collection(db, 'news'))
     if (snap.empty) return mockNews.map(normalize)
-    return snap.docs.map(d => normalize(d.data()))
+    const items = snap.docs.map(d => normalize(d.data()))
+    return items.sort((a, b) => (b.published || '').localeCompare(a.published || ''))
   } catch {
     return mockNews.map(normalize)
   }
