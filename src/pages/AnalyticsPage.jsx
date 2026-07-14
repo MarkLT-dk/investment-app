@@ -389,6 +389,7 @@ export default function AnalyticsPage() {
 }
 
 function ScatterPlot({ data }) {
+  const [tip, setTip] = useState(null)
   const W = 320, H = 200, PAD = { top: 10, right: 20, bottom: 36, left: 44 }
   const innerW = W - PAD.left - PAD.right
   const innerH = H - PAD.top  - PAD.bottom
@@ -407,6 +408,8 @@ function ScatterPlot({ data }) {
 
   const xTicks = [Math.round(xMin), Math.round((xMin + xMax) / 2), Math.round(xMax)]
   const yTicks = [Math.round(yMin), 0, Math.round(yMax)]
+
+  const TW = 118, TH = 58
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 220 }}>
@@ -427,12 +430,39 @@ function ScatterPlot({ data }) {
       ))}
       <text x={PAD.left + innerW / 2} y={H - 2} textAnchor="middle" fill="var(--color-muted)" fontSize={9}>Volatility (annualised)</text>
       <text x={10} y={PAD.top + innerH / 2} textAnchor="middle" fill="var(--color-muted)" fontSize={9} transform={`rotate(-90 10 ${PAD.top + innerH / 2})`}>1Y Return</text>
-      {data.map((d) => (
-        <g key={d.ticker}>
-          <circle cx={toSvgX(d.x)} cy={toSvgY(d.y)} r={6} fill={d.color} fillOpacity={0.85} />
-          <text x={toSvgX(d.x) + 8} y={toSvgY(d.y) + 4} fill={d.color} fontSize={9}>{d.ticker.split('.')[0]}</text>
-        </g>
-      ))}
+      {data.map((d) => {
+        const cx = toSvgX(d.x), cy = toSvgY(d.y)
+        return (
+          <g key={d.ticker}
+            onMouseEnter={() => setTip({ d, cx, cy })}
+            onMouseLeave={() => setTip(null)}
+            style={{ cursor: 'default' }}
+          >
+            <circle cx={cx} cy={cy} r={12} fill="transparent" />
+            <circle cx={cx} cy={cy} r={6} fill={d.color} fillOpacity={0.85} />
+            <text x={cx + 8} y={cy + 4} fill={d.color} fontSize={9}>{d.ticker.split('.')[0]}</text>
+          </g>
+        )
+      })}
+      {tip && (() => {
+        const { d, cx, cy } = tip
+        const tx = cx + 10 + TW > W - PAD.right ? cx - TW - 10 : cx + 10
+        const ty = Math.max(PAD.top, Math.min(cy - TH / 2, H - PAD.bottom - TH))
+        const label = d.name.length > 16 ? d.name.slice(0, 15) + '…' : d.name
+        const retColor = d.y >= 0 ? '#4ade80' : '#f87171'
+        return (
+          <g pointerEvents="none">
+            <rect x={tx} y={ty} width={TW} height={TH} rx={5} fill="var(--color-surface)" stroke="var(--color-border)" strokeWidth={1} />
+            <text x={tx + 8} y={ty + 15} fill={d.color} fontSize={10} fontWeight="600">{label}</text>
+            <text x={tx + 8} y={ty + 28} fill="var(--color-muted)" fontSize={9}>Volatility</text>
+            <text x={tx + TW - 8} y={ty + 28} textAnchor="end" fill="var(--color-ink2)" fontSize={9} fontWeight="600">{d.x.toFixed(1)}%</text>
+            <text x={tx + 8} y={ty + 42} fill="var(--color-muted)" fontSize={9}>1Y Return</text>
+            <text x={tx + TW - 8} y={ty + 42} textAnchor="end" fill={retColor} fontSize={9} fontWeight="600">{d.y >= 0 ? '+' : ''}{d.y.toFixed(1)}%</text>
+            <text x={tx + 8} y={ty + 55} fill="var(--color-muted)" fontSize={9}>Ticker</text>
+            <text x={tx + TW - 8} y={ty + 55} textAnchor="end" fill="var(--color-ink2)" fontSize={9}>{d.ticker}</text>
+          </g>
+        )
+      })()}
     </svg>
   )
 }
