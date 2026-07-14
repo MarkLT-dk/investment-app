@@ -9,6 +9,7 @@ import AnalyticsPage from './pages/AnalyticsPage'
 import WatchlistPage from './pages/WatchlistPage'
 import DiscoverPage from './pages/DiscoverPage'
 import ResearchPage from './pages/ResearchPage'
+import NewsPage from './pages/NewsPage'
 import TransactionsPage from './pages/TransactionsPage'
 import logo from './assets/logo.png'
 
@@ -18,6 +19,7 @@ const tabs = [
   { id: 'watchlist',   label: 'Watchlist'     },
   { id: 'discover',    label: 'Discover'      },
   { id: 'research',    label: 'Research'      },
+  { id: 'news',        label: 'News'          },
   { id: 'transactions', label: 'Transactions' },
 ]
 
@@ -27,6 +29,7 @@ const pages = {
   watchlist:    <WatchlistPage />,
   discover:     <DiscoverPage />,
   research:     <ResearchPage />,
+  news:         <NewsPage />,
   transactions: <TransactionsPage />,
 }
 

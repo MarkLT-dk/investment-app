@@ -1,13 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardTitle, PageTitle, EmptyState } from '../components/Card'
 import { useToast } from '../components/Toast'
-import { news, savedResearch } from '../data/mockData'
+import { savedResearch } from '../data/mockData'
+import { fetchNews } from '../services/newsService'
 import { Plus, ExternalLink, FileText, StickyNote, Trash2, Newspaper } from 'lucide-react'
 
 export default function ResearchPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [noteType, setNoteType] = useState('article')
+  const [news, setNews] = useState([])
   const showToast = useToast()
+
+  useEffect(() => {
+    fetchNews().then(setNews).catch(() => {})
+  }, [])
 
   return (
     <div className="space-y-4 sm:space-y-6">
