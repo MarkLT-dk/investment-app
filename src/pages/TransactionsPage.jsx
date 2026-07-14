@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ArrowDownLeft, ArrowUpRight, Coins, Plus, Wallet, TrendingUp, X } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, Coins, Plus, Wallet, TrendingUp, X, Pencil, Trash2 } from 'lucide-react'
 import { Card, CardTitle, PageTitle, StatCard, Badge, EmptyState, pnlColor, pnlSign } from '../components/Card'
-import { addTransaction, addDividend, addCashTransaction, fetchAllEntries, seedHistoricalData } from '../services/transactionService'
+import {
+  addTransaction, updateTransaction, deleteTransaction,
+  addDividend, updateDividend, deleteDividend,
+  addCashTransaction, updateCashTransaction, deleteCashTransaction,
+  fetchAllEntries, seedHistoricalData,
+} from '../services/transactionService'
 
 const fmt    = n => n?.toLocaleString('da-DK', { maximumFractionDigits: 0 }) ?? '—'
 const fmtDec = n => n?.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'
@@ -81,8 +86,19 @@ const TICKER_NAMES = {
 
 const EMPTY_FORM = { type: 'BUY', ticker: 'NOBI.ST', date: '', shares: '', priceDkk: '', feeDkk: '', amountDkk: '', note: '' }
 
-function AddModal({ onClose, onSaved }) {
-  const [form, setForm]     = useState(EMPTY_FORM)
+// entry = existing entry when editing, null when adding
+function AddModal({ onClose, onSaved, entry = null }) {
+  const isEdit = entry != null
+  const [form, setForm]     = useState(() => isEdit ? {
+    type:      entry.entryType || entry.type || 'BUY',
+    ticker:    entry.ticker    || 'NOBI.ST',
+    date:      entry.date      || '',
+    shares:    entry.shares    != null ? String(entry.shares)    : '',
+    priceDkk:  entry.priceDkk  != null ? String(entry.priceDkk)  : '',
+    feeDkk:    entry.feeDkk    != null ? String(entry.feeDkk)    : '',
+    amountDkk: entry.amountDkk != null ? String(entry.amountDkk) : '',
+    note:      entry.note      || '',
+  } : EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
@@ -98,7 +114,7 @@ function AddModal({ onClose, onSaved }) {
     setSaving(true)
     try {
       if (isTrade) {
-        await addTransaction({
+        const data = {
           type:     form.type,
           ticker:   form.ticker,
           name:     TICKER_NAMES[form.ticker] ?? form.ticker,
@@ -106,21 +122,24 @@ function AddModal({ onClose, onSaved }) {
           shares:   parseFloat(form.shares),
           priceDkk: parseFloat(form.priceDkk),
           feeDkk:   parseFloat(form.feeDkk || 0),
-        })
+        }
+        isEdit ? await updateTransaction(entry.id, data) : await addTransaction(data)
       } else if (isDividend) {
-        await addDividend({
+        const data = {
           ticker:    form.ticker,
           name:      TICKER_NAMES[form.ticker] ?? form.ticker,
           date:      form.date,
           amountDkk: parseFloat(form.amountDkk),
-        })
+        }
+        isEdit ? await updateDividend(entry.id, data) : await addDividend(data)
       } else {
-        await addCashTransaction({
+        const data = {
           type:      form.type,
           date:      form.date,
           amountDkk: parseFloat(form.amountDkk),
           note:      form.note,
-        })
+        }
+        isEdit ? await updateCashTransaction(entry.id, data) : await addCashTransaction(data)
       }
       onSaved()
       onClose()
@@ -136,7 +155,7 @@ function AddModal({ onClose, onSaved }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <p className="font-semibold text-ink text-sm">Add Transaction</p>
+          <p className="font-semibold text-ink text-sm">{isEdit ? 'Edit Transaction' : 'Add Transaction'}</p>
           <button onClick={onClose} className="text-muted hover:text-ink transition-colors"><X size={16} /></button>
         </div>
 
@@ -258,7 +277,7 @@ function AddModal({ onClose, onSaved }) {
             </button>
             <button type="submit" disabled={saving}
               className="flex-1 px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 disabled:opacity-50 transition-colors">
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? (isEdit ? 'Saving…' : 'Adding…') : (isEdit ? 'Save changes' : 'Add')}
             </button>
           </div>
         </form>
@@ -273,6 +292,7 @@ export default function TransactionsPage() {
   const [filter, setFilter]       = useState('All')
   const [loading, setLoading]     = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editEntry, setEditEntry] = useState(null)
   const [seeding, setSeeding]     = useState(false)
   const [seeded, setSeeded]       = useState(() => localStorage.getItem('historicalSeeded') === 'true')
 
@@ -295,6 +315,15 @@ export default function TransactionsPage() {
     setSeeded(true)
     await load()
     setSeeding(false)
+  }
+
+  async function handleDelete(e) {
+    if (!window.confirm('Delete this transaction? This cannot be undone.')) return
+    const t = entryType(e)
+    if (t === 'DIVIDEND') await deleteDividend(e.id)
+    else if (t === 'DEPOSIT' || t === 'WITHDRAWAL') await deleteCashTransaction(e.id)
+    else await deleteTransaction(e.id)
+    await load()
   }
 
   // Summary stats
@@ -390,7 +419,7 @@ export default function TransactionsPage() {
               const t   = entryType(e)
               const amt = entryAmount(e)
               return (
-                <div key={e.id ?? i} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-surface-2 transition-colors">
+                <div key={e.id ?? i} className="group flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-surface-2 transition-colors">
                   <div className="w-7 h-7 rounded-full bg-surface-2 flex items-center justify-center flex-shrink-0">
                     {typeIcon(t)}
                   </div>
@@ -410,6 +439,22 @@ export default function TransactionsPage() {
                     </div>
                   </div>
                   <p className={`text-sm font-semibold tabular-nums whitespace-nowrap ${amt.color}`}>{amt.label}</p>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => setEditEntry(e)}
+                      className="w-7 h-7 flex items-center justify-center rounded-md text-muted hover:text-ink hover:bg-surface transition-colors"
+                      aria-label="Edit"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(e)}
+                      className="w-7 h-7 flex items-center justify-center rounded-md text-muted hover:text-red-400 hover:bg-red-950/40 transition-colors"
+                      aria-label="Delete"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               )
             })}
@@ -417,7 +462,8 @@ export default function TransactionsPage() {
         )}
       </Card>
 
-      {showModal && <AddModal onClose={() => setShowModal(false)} onSaved={load} />}
+      {showModal  && <AddModal onClose={() => setShowModal(false)}  onSaved={load} />}
+      {editEntry  && <AddModal onClose={() => setEditEntry(null)}   onSaved={load} entry={editEntry} />}
     </div>
   )
 }

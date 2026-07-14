@@ -1,12 +1,15 @@
 import { db } from '../firebase'
 import {
-  collection, addDoc, getDocs, query, orderBy, where, serverTimestamp,
+  collection, addDoc, getDocs, deleteDoc, updateDoc, doc, query, where, serverTimestamp,
 } from 'firebase/firestore'
 
-// FIFO: calculate realized P&L for a new sell against existing buy lots
-async function calcFifoRealizedPnl(ticker, sellShares, sellPriceDkk, sellFeeDkk) {
+// FIFO: calculate realized P&L for a sell against existing buy lots.
+// Pass excludeId when editing an existing sell so it isn't counted twice.
+async function calcFifoRealizedPnl(ticker, sellShares, sellPriceDkk, sellFeeDkk, excludeId = null) {
   const snap = await getDocs(query(collection(db, 'transactions'), where('ticker', '==', ticker)))
-  const all  = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date))
+  const all  = snap.docs
+    .filter(d => d.id !== excludeId)
+    .map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.date.localeCompare(b.date))
   const buys      = all.filter(t => t.type === 'BUY')
   const prevSells = all.filter(t => t.type === 'SELL')
 
@@ -56,12 +59,47 @@ export async function addTransaction(data) {
   return addDoc(collection(db, 'transactions'), entry)
 }
 
+export async function updateTransaction(id, data) {
+  const entry = { ...data, feeDkk: data.feeDkk || 0 }
+  if (data.type === 'BUY') {
+    entry.costBasisDkk = data.shares * data.priceDkk + (data.feeDkk || 0)
+  }
+  if (data.type === 'SELL') {
+    const { realizedPnlDkk, costBasisDkk } = await calcFifoRealizedPnl(
+      data.ticker, data.shares, data.priceDkk, data.feeDkk || 0, id
+    )
+    entry.realizedPnlDkk = realizedPnlDkk
+    entry.costBasisDkk   = costBasisDkk
+  }
+  return updateDoc(doc(db, 'transactions', id), entry)
+}
+
+export async function deleteTransaction(id) {
+  return deleteDoc(doc(db, 'transactions', id))
+}
+
 export async function addDividend(data) {
   return addDoc(collection(db, 'dividends'), { ...data, createdAt: serverTimestamp() })
 }
 
+export async function updateDividend(id, data) {
+  return updateDoc(doc(db, 'dividends', id), data)
+}
+
+export async function deleteDividend(id) {
+  return deleteDoc(doc(db, 'dividends', id))
+}
+
 export async function addCashTransaction(data) {
   return addDoc(collection(db, 'cashTransactions'), { ...data, createdAt: serverTimestamp() })
+}
+
+export async function updateCashTransaction(id, data) {
+  return updateDoc(doc(db, 'cashTransactions', id), data)
+}
+
+export async function deleteCashTransaction(id) {
+  return deleteDoc(doc(db, 'cashTransactions', id))
 }
 
 export async function fetchAllEntries() {

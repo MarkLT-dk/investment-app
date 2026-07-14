@@ -470,7 +470,31 @@ export default function PortfolioPage() {
   )
 }
 
+function ReturnTooltip({ p }) {
+  const rows = [
+    { label: '1D',  val: p.return1d  },
+    { label: '1M',  val: p.return1m  },
+    { label: 'YTD', val: p.returnYtd },
+    { label: '1Y',  val: p.return1y  },
+  ]
+  return (
+    <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-36 bg-surface border border-border rounded-lg shadow-xl px-3 py-2 pointer-events-none">
+      <p className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1.5">{p.ticker} Returns</p>
+      {rows.map(({ label, val }) => (
+        <div key={label} className="flex justify-between items-center py-0.5">
+          <span className="text-[11px] text-muted">{label}</span>
+          <span className={`text-[11px] font-semibold tabular-nums ${pnlColor(val)}`}>
+            {val != null ? `${pnlSign(val)}${val.toFixed(1)}%` : '—'}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function HoldingsTable({ rows, pinned = new Set(), onTogglePin = () => {} }) {
+  const [hoveredTicker, setHoveredTicker] = useState(null)
+
   return (
     <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
       <table className="w-full text-xs min-w-[440px]">
@@ -499,7 +523,14 @@ function HoldingsTable({ rows, pinned = new Set(), onTogglePin = () => {} }) {
                 <p className="text-muted font-mono text-[11px] mt-0.5">{p.ticker}</p>
               </td>
               <td className="py-2.5 px-2 text-ink2 tabular-nums">{(p.weight * 100).toFixed(0)}%</td>
-              <td className={`py-2.5 px-2 tabular-nums ${pnlColor(p.return1y)}`}>{pnlSign(p.return1y)}{p.return1y?.toFixed(1)}%</td>
+              <td
+                className={`py-2.5 px-2 tabular-nums relative cursor-default ${pnlColor(p.return1y)}`}
+                onMouseEnter={() => setHoveredTicker(p.ticker)}
+                onMouseLeave={() => setHoveredTicker(null)}
+              >
+                {pnlSign(p.return1y)}{p.return1y?.toFixed(1)}%
+                {hoveredTicker === p.ticker && <ReturnTooltip p={p} />}
+              </td>
               <td className={`py-2.5 px-2 tabular-nums whitespace-nowrap ${pnlColor(p.unrealizedPnlDkk)}`}>{pnlSign(p.unrealizedPnlDkk)}{p.unrealizedPnlDkk?.toLocaleString('da-DK', { maximumFractionDigits: 0 })}</td>
               <td className={`py-2.5 px-2 tabular-nums ${pnlColor(p.unrealizedPnlPct)}`}>{pnlSign(p.unrealizedPnlPct)}{p.unrealizedPnlPct?.toFixed(1)}%</td>
             </tr>

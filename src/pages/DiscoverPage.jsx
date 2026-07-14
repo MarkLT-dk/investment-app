@@ -44,6 +44,8 @@ export default function DiscoverPage() {
   })
 
   async function handleAddToWatchlist(ticker, name) {
+    const alreadyIn = liveData?.watchlistTickers?.some(w => w.ticker === ticker)
+    if (alreadyIn) { showToast(`${ticker} is already on your watchlist`); return }
     try {
       await addDoc(collection(db, 'watchlist'), {
         ticker,
@@ -53,7 +55,7 @@ export default function DiscoverPage() {
       })
       showToast(`${ticker} added to watchlist`)
     } catch {
-      showToast(`${ticker} added to watchlist`)
+      showToast(`Failed to add ${ticker}`)
     }
   }
 
