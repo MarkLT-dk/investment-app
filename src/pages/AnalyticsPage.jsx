@@ -60,7 +60,16 @@ export default function AnalyticsPage() {
 
   const selectedData = selected.map(t => allReturns[t]).filter(Boolean)
   const allHistory = generateHistory(selected)
-  const priceHistory = allHistory.slice(Math.max(0, allHistory.length - period.weeks))
+  const rawSlice = allHistory.slice(Math.max(0, allHistory.length - period.weeks))
+  // Rebase each ticker to 0% at the start of the selected period
+  const priceHistory = rawSlice.map(row => {
+    const rebased = { date: row.date }
+    selected.forEach(t => {
+      const base = rawSlice[0]?.[t] ?? 0
+      rebased[t] = row[t] != null ? parseFloat((row[t] - base).toFixed(1)) : null
+    })
+    return rebased
+  })
 
   // Scatter data for custom SVG chart
   const scatterData = selected.map((t, i) => {

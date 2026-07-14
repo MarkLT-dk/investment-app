@@ -84,13 +84,15 @@ export async function fetchPositions() {
       continue
     }
 
+    const invType = meta.investmentType || mock?.investmentType || 'Stock'
     positions.push({
       ticker,
-      name:            meta.name            || mock?.name            || ticker,
-      sector:          meta.sector          || mock?.sector          || '',
-      country:         meta.country         || mock?.country         || '',
-      currency:        live?.currency       || mock?.currency        || 'DKK',
-      investmentType:  meta.investmentType  || mock?.investmentType  || 'Stock',
+      name:            meta.name    || mock?.name    || ticker,
+      sector:          meta.sector  || mock?.sector  || '',
+      country:         meta.country || mock?.country || '',
+      currency:        live?.currency || mock?.currency || 'DKK',
+      investmentType:  invType,
+      category:        invType === 'ETF' ? 'Core' : 'Satellite',
       shares:          netShares,
       avgCostDkk:      Math.round(avgCostDkk * 100) / 100,
       currentPriceDkk: Math.round(currentPriceDkk * 100) / 100,
