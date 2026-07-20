@@ -84,7 +84,12 @@ const TICKER_NAMES = {
   'DSV.CO':'DSV A/S',
 }
 
-const EMPTY_FORM = { type: 'BUY', ticker: 'NOBI.ST', date: '', shares: '', priceDkk: '', feeDkk: '', amountDkk: '', note: '' }
+const EMPTY_FORM = { type: 'BUY', ticker: 'NOBI.ST', date: '', shares: '', priceDkk: '', feeDkk: '', totalDkk: '', amountDkk: '', note: '' }
+
+function initTotal(entry) {
+  if (!entry || entry.shares == null || entry.priceDkk == null) return ''
+  return String(Math.round(entry.shares * entry.priceDkk + (entry.feeDkk || 0)))
+}
 
 // entry = existing entry when editing, null when adding
 function AddModal({ onClose, onSaved, entry = null }) {
@@ -96,13 +101,43 @@ function AddModal({ onClose, onSaved, entry = null }) {
     shares:    entry.shares    != null ? String(entry.shares)    : '',
     priceDkk:  entry.priceDkk  != null ? String(entry.priceDkk)  : '',
     feeDkk:    entry.feeDkk    != null ? String(entry.feeDkk)    : '',
+    totalDkk:  initTotal(entry),
     amountDkk: entry.amountDkk != null ? String(entry.amountDkk) : '',
     note:      entry.note      || '',
   } : EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const set = (k, v) => setForm(f => {
+    const next = { ...f, [k]: v }
+    const shares = parseFloat(k === 'shares' ? v : next.shares) || 0
+    const fee    = parseFloat(k === 'feeDkk'  ? v : next.feeDkk)  || 0
+
+    if (k === 'priceDkk') {
+      const price = parseFloat(v) || 0
+      next.totalDkk = shares && price ? String(Math.round(shares * price + fee)) : ''
+    } else if (k === 'totalDkk') {
+      const total = parseFloat(v) || 0
+      next.priceDkk = shares && total ? ((total - fee) / shares).toFixed(4) : ''
+    } else if (k === 'shares') {
+      const s = parseFloat(v) || 0
+      if (next.priceDkk) {
+        next.totalDkk = s ? String(Math.round(s * (parseFloat(next.priceDkk) || 0) + fee)) : ''
+      } else if (next.totalDkk) {
+        const total = parseFloat(next.totalDkk) || 0
+        next.priceDkk = s && total ? ((total - fee) / s).toFixed(4) : ''
+      }
+    } else if (k === 'feeDkk') {
+      const total = parseFloat(next.totalDkk) || 0
+      const price = parseFloat(next.priceDkk) || 0
+      if (total) {
+        next.priceDkk = shares && total ? ((total - (parseFloat(v) || 0)) / shares).toFixed(4) : ''
+      } else if (price) {
+        next.totalDkk = shares && price ? String(Math.round(shares * price + (parseFloat(v) || 0))) : ''
+      }
+    }
+    return next
+  })
 
   const isTrade    = form.type === 'BUY' || form.type === 'SELL'
   const isDividend = form.type === 'DIVIDEND'
@@ -229,11 +264,11 @@ function AddModal({ onClose, onSaved, entry = null }) {
               </div>
               <div>
                 <label className="block text-xs text-muted mb-1.5 font-semibold uppercase tracking-wider">Total (DKK)</label>
-                <p className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-ink2 tabular-nums">
-                  {form.shares && form.priceDkk
-                    ? fmt(parseFloat(form.shares) * parseFloat(form.priceDkk) + parseFloat(form.feeDkk || 0))
-                    : '—'}
-                </p>
+                <input
+                  type="number" min="0" step="any" placeholder="Auto"
+                  value={form.totalDkk} onChange={e => set('totalDkk', e.target.value)}
+                  className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-ink focus:outline-none focus:border-blue-500"
+                />
               </div>
             </div>
           )}
