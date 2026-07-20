@@ -2,13 +2,14 @@ import { db } from '../firebase'
 import { collection, getDocs } from 'firebase/firestore'
 
 export async function fetchAnalyticsData() {
-  const [fundSnap, riskSnap, dimSnap, watchSnap, summarySnap, analystSnap] = await Promise.all([
+  const [fundSnap, riskSnap, dimSnap, watchSnap, summarySnap, analystSnap, priceSnap] = await Promise.all([
     getDocs(collection(db, 'fundamentals')),
     getDocs(collection(db, 'riskMetrics')),
     getDocs(collection(db, 'dimTicker')),
     getDocs(collection(db, 'watchlist')),
     getDocs(collection(db, 'tickerSummary')),
     getDocs(collection(db, 'analystRatings')),
+    getDocs(collection(db, 'marketPrices')),
   ])
 
   const fundamentals = {}
@@ -37,5 +38,8 @@ export async function fetchAnalyticsData() {
   const analystRatings = {}
   analystSnap.docs.forEach(d => { analystRatings[d.id] = d.data() })
 
-  return { fundamentals, riskMetrics, dimTicker, watchlistTickers, tickerSummary, analystRatings }
+  const marketPrices = {}
+  priceSnap.docs.forEach(d => { marketPrices[d.id] = d.data() })
+
+  return { fundamentals, riskMetrics, dimTicker, watchlistTickers, tickerSummary, analystRatings, marketPrices }
 }
