@@ -7,7 +7,7 @@ import { fetchPositions } from '../services/positionService'
 import { fetchLatestBrief } from '../services/dailyBriefService'
 import { addDoc, collection } from 'firebase/firestore'
 import { db } from '../firebase'
-import { Plus, Zap, SearchX, TrendingUp, TrendingDown, Minus, Brain, AlertCircle } from 'lucide-react'
+import { Plus, Zap, SearchX, TrendingUp, TrendingDown, Minus, Brain, AlertCircle, Map } from 'lucide-react'
 
 const labelColor = { Core: 'green', Growth: 'blue', Diversifier: 'purple', Explore: 'gray' }
 
@@ -138,6 +138,34 @@ export default function DiscoverPage() {
               )
             })}
           </div>
+
+          {(brief.investmentAreas ?? []).length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border space-y-3">
+              <p className="text-[11px] font-semibold text-muted uppercase tracking-wider">Investment areas</p>
+              {brief.investmentAreas.map((area, i) => {
+                const verdictColor = area.verdict === 'GOOD TIME' ? 'green' : area.verdict === 'WAIT' ? 'yellow' : 'blue'
+                return (
+                  <div key={i} className="flex gap-3 py-3 border-b border-border last:border-0">
+                    <Map size={13} className="text-purple-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold text-ink">{area.areaName}</span>
+                        {area.verdict && <Badge color={verdictColor}>{area.verdict}</Badge>}
+                      </div>
+                      <p className="text-xs text-ink2 mb-1.5">{area.analysis}</p>
+                      {(area.suggestedInstruments ?? []).length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {area.suggestedInstruments.map((s, j) => (
+                            <span key={j} className="text-[10px] bg-purple-950/40 border border-purple-800/30 rounded px-1.5 py-0.5 text-purple-300">{s}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           {(brief.portfolioAlerts ?? []).length > 0 && (
             <div className="mt-4 pt-4 border-t border-border">

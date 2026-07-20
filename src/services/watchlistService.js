@@ -1,5 +1,5 @@
 import { db } from '../firebase'
-import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 
 export async function fetchWatchlist() {
   const snap = await getDocs(collection(db, 'watchlist'))
@@ -13,6 +13,10 @@ export async function addWatchlistItem(data) {
     dateAdded: new Date().toISOString().slice(0, 10),
     createdAt: serverTimestamp(),
   })
+}
+
+export async function updateWatchlistItem(id, data) {
+  return updateDoc(doc(db, 'watchlist', id), data)
 }
 
 export async function removeWatchlistItem(id) {
