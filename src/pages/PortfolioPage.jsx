@@ -522,7 +522,14 @@ function HoldingsTable({ rows, pinned = new Set(), onTogglePin = () => {} }) {
                 <p className="text-ink font-medium">{p.name}</p>
                 <p className="text-muted font-mono text-[11px] mt-0.5">{p.ticker}</p>
               </td>
-              <td className="py-2.5 px-2 text-ink2 tabular-nums">{p.shares?.toLocaleString('da-DK')}</td>
+              <td className="py-2.5 px-2 text-ink2 tabular-nums relative group/shares cursor-default">
+                {p.shares?.toLocaleString('da-DK')}
+                {p.currentValueDkk != null && (
+                  <div className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap bg-surface border border-border rounded-lg shadow-xl px-3 py-1.5 text-[11px] text-ink pointer-events-none opacity-0 group-hover/shares:opacity-100 transition-opacity">
+                    {fmt(p.currentValueDkk)} DKK
+                  </div>
+                )}
+              </td>
               <td className="py-2.5 px-2 text-ink2 tabular-nums">{(p.weight * 100).toFixed(0)}%</td>
               <td
                 className={`py-2.5 px-2 tabular-nums relative cursor-default ${pnlColor(p.return1y)}`}
