@@ -7,6 +7,8 @@ import {
   addCashTransaction, updateCashTransaction, deleteCashTransaction,
   fetchAllEntries, seedHistoricalData,
 } from '../services/transactionService'
+import { db } from '../firebase'
+import { collection, getDocs } from 'firebase/firestore'
 
 const fmt    = n => n?.toLocaleString('da-DK', { maximumFractionDigits: 0 }) ?? '—'
 const fmtDec = n => n?.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'
@@ -72,19 +74,8 @@ function entryAmount(e) {
 }
 
 // ── Add Transaction Modal ────────────────────────────────────────────────────
-const TICKERS = [
-  'NOBI.ST','NIBE-B.ST','GMAB.CO','GN.CO','DFDS.CO','CLA-B.ST',
-  'NOVO-B.CO','VUSA.AS','AMZN','COLO-B.CO','PNDORA.CO','DSV.CO',
-]
-const TICKER_NAMES = {
-  'NOBI.ST':'Nobia AB','NIBE-B.ST':'NIBE Industrier B','GMAB.CO':'Genmab A/S',
-  'GN.CO':'GN Store Nord A/S','DFDS.CO':'DFDS A/S','CLA-B.ST':'Cloetta AB',
-  'NOVO-B.CO':'Novo Nordisk B','VUSA.AS':'Vanguard S&P 500 UCITS',
-  'AMZN':'Amazon.com Inc.','COLO-B.CO':'Coloplast B','PNDORA.CO':'Pandora A/S',
-  'DSV.CO':'DSV A/S',
-}
 
-const EMPTY_FORM = { type: 'BUY', ticker: 'NOBI.ST', date: '', shares: '', priceDkk: '', feeDkk: '', totalDkk: '', amountDkk: '', note: '' }
+const EMPTY_FORM = { type: 'BUY', ticker: '', date: '', shares: '', priceDkk: '', feeDkk: '', totalDkk: '', amountDkk: '', note: '' }
 
 function initTotal(entry) {
   if (!entry || entry.shares == null || entry.priceDkk == null) return ''
@@ -92,7 +83,7 @@ function initTotal(entry) {
 }
 
 // entry = existing entry when editing, null when adding
-function AddModal({ onClose, onSaved, entry = null }) {
+function AddModal({ onClose, onSaved, entry = null, knownTickers = [] }) {
   const isEdit = entry != null
   const [form, setForm]     = useState(() => isEdit ? {
     type:      entry.entryType || entry.type || 'BUY',
@@ -149,10 +140,11 @@ function AddModal({ onClose, onSaved, entry = null }) {
     setSaving(true)
     try {
       if (isTrade) {
+        const tickerName = knownTickers.find(t => t.ticker === form.ticker)?.name ?? form.ticker
         const data = {
           type:     form.type,
           ticker:   form.ticker,
-          name:     TICKER_NAMES[form.ticker] ?? form.ticker,
+          name:     tickerName,
           date:     form.date,
           shares:   parseFloat(form.shares),
           priceDkk: parseFloat(form.priceDkk),
@@ -160,9 +152,10 @@ function AddModal({ onClose, onSaved, entry = null }) {
         }
         isEdit ? await updateTransaction(entry.id, data) : await addTransaction(data)
       } else if (isDividend) {
+        const tickerName = knownTickers.find(t => t.ticker === form.ticker)?.name ?? form.ticker
         const data = {
           ticker:    form.ticker,
-          name:      TICKER_NAMES[form.ticker] ?? form.ticker,
+          name:      tickerName,
           date:      form.date,
           amountDkk: parseFloat(form.amountDkk),
         }
@@ -215,13 +208,19 @@ function AddModal({ onClose, onSaved, entry = null }) {
           {(isTrade || isDividend) && (
             <div>
               <label className="block text-xs text-muted mb-1.5 font-semibold uppercase tracking-wider">Ticker</label>
-              <select
+              <input
+                list="ticker-list"
+                required
+                placeholder="e.g. NOVO-B.CO"
                 value={form.ticker}
-                onChange={e => set('ticker', e.target.value)}
+                onChange={e => set('ticker', e.target.value.toUpperCase())}
                 className="w-full bg-surface-2 border border-border rounded-md px-3 py-2 text-sm text-ink focus:outline-none focus:border-blue-500"
-              >
-                {TICKERS.map(t => <option key={t} value={t}>{t} — {TICKER_NAMES[t]}</option>)}
-              </select>
+              />
+              <datalist id="ticker-list">
+                {knownTickers.map(t => (
+                  <option key={t.ticker} value={t.ticker}>{t.name ? `${t.ticker} — ${t.name}` : t.ticker}</option>
+                ))}
+              </datalist>
             </div>
           )}
 
@@ -326,10 +325,30 @@ export default function TransactionsPage() {
   const [entries, setEntries]     = useState([])
   const [filter, setFilter]       = useState('All')
   const [loading, setLoading]     = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [editEntry, setEditEntry] = useState(null)
-  const [seeding, setSeeding]     = useState(false)
-  const [seeded, setSeeded]       = useState(() => localStorage.getItem('historicalSeeded') === 'true')
+  const [showModal, setShowModal]     = useState(false)
+  const [editEntry, setEditEntry]     = useState(null)
+  const [seeding, setSeeding]         = useState(false)
+  const [seeded, setSeeded]           = useState(() => localStorage.getItem('historicalSeeded') === 'true')
+  const [knownTickers, setKnownTickers] = useState([])
+
+  useEffect(() => {
+    async function loadTickers() {
+      try {
+        const [dimSnap, watchSnap] = await Promise.all([
+          getDocs(collection(db, 'dimTicker')),
+          getDocs(collection(db, 'watchlist')),
+        ])
+        const map = {}
+        dimSnap.docs.forEach(d => { map[d.id] = { ticker: d.id, name: d.data().name || d.id } })
+        watchSnap.docs.forEach(d => {
+          const t = d.data().ticker
+          if (t && !map[t]) map[t] = { ticker: t, name: d.data().name || t }
+        })
+        setKnownTickers(Object.values(map).sort((a, b) => a.ticker.localeCompare(b.ticker)))
+      } catch {}
+    }
+    loadTickers()
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -497,8 +516,8 @@ export default function TransactionsPage() {
         )}
       </Card>
 
-      {showModal  && <AddModal onClose={() => setShowModal(false)}  onSaved={load} />}
-      {editEntry  && <AddModal onClose={() => setEditEntry(null)}   onSaved={load} entry={editEntry} />}
+      {showModal && <AddModal onClose={() => setShowModal(false)} onSaved={load} knownTickers={knownTickers} />}
+      {editEntry && <AddModal onClose={() => setEditEntry(null)}  onSaved={load} entry={editEntry} knownTickers={knownTickers} />}
     </div>
   )
 }
