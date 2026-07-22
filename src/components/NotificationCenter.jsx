@@ -12,6 +12,11 @@ export default function NotificationCenter() {
   const ref = useRef(null)
 
   const visible = signals.filter((_, i) => !dismissed.includes(i))
+  const dotColorClass = visible.some(s => s.severity === 'warn')
+    ? 'bg-yellow-400'
+    : visible.some(s => s.severity === 'buy')
+    ? 'bg-green-400'
+    : 'bg-blue-500'
 
   useEffect(() => {
     function onClick(e) {
@@ -30,7 +35,7 @@ export default function NotificationCenter() {
       >
         <Bell size={17} />
         {visible.length > 0 && (
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-surface" />
+          <span className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-surface ${dotColorClass}`} />
         )}
       </button>
 

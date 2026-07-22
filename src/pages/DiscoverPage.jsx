@@ -801,8 +801,39 @@ export default function DiscoverPage() {
                 </button>
               ))}
             </div>
-            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-              <table className="w-full text-xs min-w-[640px]">
+            <div className="sm:hidden divide-y divide-border -mx-4 sm:mx-0">
+              {watchlistRows.length === 0 ? (
+                <EmptyState icon={SearchX} title="No watchlist stocks" sub="Add stocks to your watchlist to see them here." />
+              ) : watchlistRows.map(w => {
+                const mp      = liveData?.marketPrices?.[w.ticker] ?? {}
+                const ar      = liveData?.analystRatings?.[w.ticker] ?? {}
+                const current = mp.currentPriceDkk ?? null
+                const target  = w.target_buy_price_dkk ? parseFloat(w.target_buy_price_dkk) : null
+                const diff    = pctDiff(current, target)
+                const recInfo = REC_LABELS[ar.recommendationKey]
+                return (
+                  <div key={w.ticker} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div className="min-w-0">
+                        <p className="font-medium text-ink text-sm truncate">{liveData?.dimTicker?.[w.ticker]?.name ?? w.ticker}</p>
+                        <p className="text-muted font-mono text-[11px] mt-0.5">{w.ticker}</p>
+                      </div>
+                      <Badge color={STATUS_COLORS[w.status] ?? 'gray'}>{w.status ?? '—'}</Badge>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-ink2">
+                      <span>Current {current != null ? fmt(current) : '—'}</span>
+                      <span>Target {target != null ? fmt(target) : '—'}</span>
+                      <span className={`font-semibold ${diff == null ? '' : diff <= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {diff == null ? '—' : `${diff <= 0 ? '' : '+'}${diff.toFixed(1)}%`}
+                      </span>
+                      {recInfo && <Badge color={recInfo.color}>{recInfo.label}</Badge>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-xs min-w-[640px]">
                 <thead>
                   <tr className="border-b border-border">
                     {['Stock', 'Status', 'Current (DKK)', 'Target (DKK)', 'Distance', 'Analyst', 'Thesis'].map(h => (
@@ -901,8 +932,41 @@ export default function DiscoverPage() {
                 </button>
               </div>
             </div>
-            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-              <table className="w-full text-xs min-w-[560px]">
+            <div className="sm:hidden divide-y divide-border -mx-4 sm:mx-0">
+              {screenerRows.length === 0 ? (
+                <EmptyState icon={SearchX} title="No stocks match the current filters" sub="Try loosening your P/E, upside, or rating filters." />
+              ) : screenerRows.map(p => {
+                const f       = liveData?.fundamentals?.[p.ticker]   ?? {}
+                const ar      = liveData?.analystRatings?.[p.ticker] ?? {}
+                const rm      = liveData?.riskMetrics?.[p.ticker]    ?? {}
+                const r1      = rm['1Y'] || rm['2Y'] || {}
+                const recInfo = REC_LABELS[ar.recommendationKey]
+                return (
+                  <div key={p.ticker} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div className="min-w-0">
+                        <p className="font-medium text-ink text-sm truncate">{p.name}</p>
+                        <p className="text-muted font-mono text-[11px] mt-0.5">{p.ticker}</p>
+                      </div>
+                      <button
+                        onClick={() => handleAddToWatchlist(p.ticker, p.name)}
+                        className="text-blue-400 hover:text-blue-300 text-xs font-medium transition-colors flex-shrink-0"
+                      >
+                        + Watchlist
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap text-[11px] text-ink2">
+                      <span>P/E {f.peRatio != null ? f.peRatio.toFixed(1) : '—'}</span>
+                      <span className={pnlColor(f.upsideToTarget)}>Upside {f.upsideToTarget != null ? `+${(f.upsideToTarget * 100).toFixed(0)}%` : '—'}</span>
+                      <span className={pnlColor(p.return1y)}>1Y {p.return1y != null ? `${pnlSign(p.return1y)}${p.return1y.toFixed(1)}%` : '—'}</span>
+                      {recInfo && <Badge color={recInfo.color}>{recInfo.label}</Badge>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-xs min-w-[560px]">
                 <thead>
                   <tr className="border-b border-border">
                     {['Name', 'P/E', 'Upside', 'Analyst', 'Sharpe', '1Y Return', ''].map(h => (

@@ -322,14 +322,16 @@ export default function PortfolioPage() {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {visibleKpi.value && (
-          <StatCard
-            label="Portfolio Value"
-            icon={Wallet}
-            spark={sparkValues}
-            value={<LiveValue live={liveValue}><AnimatedNumber value={Math.round(liveValue.value)} suffix=" DKK" /></LiveValue>}
-            sub={`Unrealised: ${pnlSign(s.totalUnrealizedDkk)}${fmt(s.totalUnrealizedDkk)} DKK`}
-            subColor={pnlColor(s.totalUnrealizedDkk)}
-          />
+          <div className="col-span-2 md:col-span-1">
+            <StatCard
+              label="Portfolio Value"
+              icon={Wallet}
+              spark={sparkValues}
+              value={<span className="text-2xl sm:text-3xl"><LiveValue live={liveValue}><AnimatedNumber value={Math.round(liveValue.value)} suffix=" DKK" /></LiveValue></span>}
+              sub={`Unrealised: ${pnlSign(s.totalUnrealizedDkk)}${fmt(s.totalUnrealizedDkk)} DKK`}
+              subColor={pnlColor(s.totalUnrealizedDkk)}
+            />
+          </div>
         )}
         {visibleKpi.today && (
           <StatCard
@@ -496,7 +498,36 @@ function HoldingsTable({ rows, pinned = new Set(), onTogglePin = () => {} }) {
   const [hoveredTicker, setHoveredTicker] = useState(null)
 
   return (
-    <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+    <>
+      {/* Mobile: stacked cards so P&L isn't hidden behind horizontal scroll */}
+      <div className="sm:hidden divide-y divide-border -mx-4 sm:mx-0">
+        {rows.map(p => (
+          <div key={p.ticker} className="px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2 min-w-0">
+                <button
+                  onClick={() => onTogglePin(p.ticker)}
+                  aria-label={pinned.has(p.ticker) ? 'Unpin' : 'Pin'}
+                  className={`mt-0.5 flex-shrink-0 transition-colors ${pinned.has(p.ticker) ? 'text-yellow-400' : 'text-border'}`}
+                >
+                  <Star size={12} fill={pinned.has(p.ticker) ? 'currentColor' : 'none'} />
+                </button>
+                <div className="min-w-0">
+                  <p className="text-ink font-medium text-sm truncate">{p.name}</p>
+                  <p className="text-muted font-mono text-[11px] mt-0.5">{p.ticker} · {(p.weight * 100).toFixed(0)}% wt</p>
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className={`text-sm font-semibold tabular-nums ${pnlColor(p.unrealizedPnlDkk)}`}>{pnlSign(p.unrealizedPnlDkk)}{p.unrealizedPnlDkk?.toLocaleString('da-DK', { maximumFractionDigits: 0 })} DKK</p>
+                <p className={`text-xs tabular-nums ${pnlColor(p.unrealizedPnlPct)}`}>{pnlSign(p.unrealizedPnlPct)}{p.unrealizedPnlPct?.toFixed(1)}% · 1Y {pnlSign(p.return1y)}{p.return1y?.toFixed(1)}%</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop / tablet: full table */}
+      <div className="hidden sm:block overflow-x-auto">
       <table className="w-full text-xs min-w-[440px]">
         <thead>
           <tr className="border-b border-border">
@@ -545,7 +576,8 @@ function HoldingsTable({ rows, pinned = new Set(), onTogglePin = () => {} }) {
           ))}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   )
 }
 
