@@ -333,19 +333,32 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     async function loadTickers() {
+      const map = {}
+      // dimTicker is populated by the pipeline sync — may be absent; don't let it block the others
       try {
-        const [dimSnap, watchSnap] = await Promise.all([
-          getDocs(collection(db, 'dimTicker')),
-          getDocs(collection(db, 'watchlist')),
-        ])
-        const map = {}
-        dimSnap.docs.forEach(d => { map[d.id] = { ticker: d.id, name: d.data().name || d.id } })
-        watchSnap.docs.forEach(d => {
+        const snap = await getDocs(collection(db, 'dimTicker'))
+        snap.docs.forEach(d => { map[d.id] = { ticker: d.id, name: d.data().name || d.id } })
+      } catch (e) { console.warn('dimTicker unavailable:', e) }
+
+      // Watchlist — always readable by the app
+      try {
+        const snap = await getDocs(collection(db, 'watchlist'))
+        snap.docs.forEach(d => {
           const t = d.data().ticker
           if (t && !map[t]) map[t] = { ticker: t, name: d.data().name || t }
         })
-        setKnownTickers(Object.values(map).sort((a, b) => a.ticker.localeCompare(b.ticker)))
-      } catch {}
+      } catch (e) { console.warn('watchlist unavailable:', e) }
+
+      // Transactions — ensures portfolio tickers appear even before a pipeline sync
+      try {
+        const snap = await getDocs(collection(db, 'transactions'))
+        snap.docs.forEach(d => {
+          const { ticker, name } = d.data()
+          if (ticker && !map[ticker]) map[ticker] = { ticker, name: name || ticker }
+        })
+      } catch (e) { console.warn('transactions unavailable:', e) }
+
+      setKnownTickers(Object.values(map).sort((a, b) => a.ticker.localeCompare(b.ticker)))
     }
     loadTickers()
   }, [])
