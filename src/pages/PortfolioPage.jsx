@@ -501,7 +501,7 @@ function HoldingsTable({ rows, pinned = new Set(), onTogglePin = () => {} }) {
         <thead>
           <tr className="border-b border-border">
             <th className="py-2 px-2 text-left first:pl-0 w-6"></th>
-            {['Name', 'Wt', '1Y', 'P&L DKK', 'P&L %'].map(h => (
+            {['Name', 'Shares', 'Wt', '1Y', 'P&L DKK', 'P&L %'].map(h => (
               <th key={h} className="py-2 px-2 text-left text-muted font-semibold">{h}</th>
             ))}
           </tr>
@@ -522,6 +522,7 @@ function HoldingsTable({ rows, pinned = new Set(), onTogglePin = () => {} }) {
                 <p className="text-ink font-medium">{p.name}</p>
                 <p className="text-muted font-mono text-[11px] mt-0.5">{p.ticker}</p>
               </td>
+              <td className="py-2.5 px-2 text-ink2 tabular-nums">{p.shares?.toLocaleString('da-DK')}</td>
               <td className="py-2.5 px-2 text-ink2 tabular-nums">{(p.weight * 100).toFixed(0)}%</td>
               <td
                 className={`py-2.5 px-2 tabular-nums relative cursor-default ${pnlColor(p.return1y)}`}
