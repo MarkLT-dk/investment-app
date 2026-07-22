@@ -23,11 +23,9 @@ function entryType(e) {
 }
 
 function typeBadge(type) {
-  // Neutral by design: green/red are reserved for gain/loss amounts (pnlColor),
-  // not transaction type — a green "Buy" badge next to a red cost amount was contradictory.
   const map = {
-    BUY:        { color: 'gray',   label: 'Buy'        },
-    SELL:       { color: 'gray',   label: 'Sell'       },
+    BUY:        { color: 'green',  label: 'Buy'        },
+    SELL:       { color: 'red',    label: 'Sell'       },
     DIVIDEND:   { color: 'purple', label: 'Dividend'   },
     DEPOSIT:    { color: 'blue',   label: 'Deposit'    },
     WITHDRAWAL: { color: 'yellow', label: 'Withdrawal' },
@@ -419,16 +417,16 @@ export default function TransactionsPage() {
             <button
               onClick={handleSeed}
               disabled={seeding}
-              className="px-3.5 py-2 rounded-md bg-surface-2 border border-border text-xs font-semibold text-muted hover:text-ink transition-colors disabled:opacity-50"
+              className="px-3.5 py-2 rounded-lg bg-surface border border-border text-sm text-muted hover:text-ink transition-colors disabled:opacity-50"
             >
               {seeding ? 'Importing…' : 'Import history'}
             </button>
           )}
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors shadow-sm"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 transition-colors"
           >
-            <Plus size={13} />
+            <Plus size={14} />
             Add
           </button>
         </div>
@@ -508,7 +506,7 @@ export default function TransactionsPage() {
                     </div>
                   </div>
                   <p className={`text-sm font-semibold tabular-nums whitespace-nowrap ${amt.color}`}>{amt.label}</p>
-                  <div className="flex gap-1 opacity-60 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => setEditEntry(e)}
                       className="w-7 h-7 flex items-center justify-center rounded-md text-muted hover:text-ink hover:bg-surface transition-colors"

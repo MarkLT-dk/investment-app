@@ -316,32 +316,13 @@ export default function AnalyticsPage() {
         <div className="space-y-4 sm:space-y-5">
           <Card>
             <CardTitle>Fundamentals</CardTitle>
-            {/* Mobile: stacked cards instead of a scrolling table */}
-            <div className="sm:hidden divide-y divide-border -mx-4 sm:mx-0">
-              {selected.map((t, i) => {
-                const f    = fundMap[t] ?? {}
-                const info = allTickers.find(x => x.ticker === t)
-                return (
-                  <div key={t} className="px-4 py-2.5">
-                    <p className="text-xs font-semibold mb-1.5" style={{ color: COLORS[i] }}>{info?.name ?? t}</p>
-                    <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-[11px]">
-                      <p className="text-muted">P/E <span className="text-ink2">{f.pe != null ? f.pe.toFixed(1) : '—'}</span></p>
-                      <p className="text-muted">P/B <span className="text-ink2">{f.pb != null ? f.pb.toFixed(2) : '—'}</span></p>
-                      <p className="text-muted">EV/EBITDA <span className="text-ink2">{f.evEbitda != null ? f.evEbitda.toFixed(2) : '—'}</span></p>
-                      <p className="text-muted">Margin <span className="text-ink2">{f.profitMargin != null ? `${(f.profitMargin * 100).toFixed(0)}%` : '—'}</span></p>
-                      <p className="text-muted">Upside <span className={pnlColor(f.upside)}>{f.upside != null ? `+${(f.upside * 100).toFixed(0)}%` : '—'}</span></p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="hidden sm:block overflow-x-auto">
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <table className="w-full text-xs min-w-[420px]">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="py-2 px-2 text-left text-muted font-semibold">Stock</th>
+                    <th className="py-1.5 px-2 text-left text-muted font-semibold">Stock</th>
                     {['P/E', 'P/B', 'EV/EBITDA', 'Margin', 'Upside'].map(h => (
-                      <th key={h} className="py-2 px-2 text-center text-muted font-semibold">{h}</th>
+                      <th key={h} className="py-1.5 px-2 text-center text-muted font-semibold">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -367,31 +348,13 @@ export default function AnalyticsPage() {
 
           <Card>
             <CardTitle>Risk Metrics (1Y)</CardTitle>
-            <div className="sm:hidden divide-y divide-border -mx-4 sm:mx-0">
-              {selected.map((t, i) => {
-                const r    = riskMap[t] ?? {}
-                const info = allTickers.find(x => x.ticker === t)
-                return (
-                  <div key={t} className="px-4 py-2.5">
-                    <p className="text-xs font-semibold mb-1.5" style={{ color: COLORS[i] }}>{info?.name ?? t}</p>
-                    <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-[11px]">
-                      <p className="text-muted">Beta <span className="text-ink2">{fmt2(r.beta)}</span></p>
-                      <p className="text-muted">Sharpe <span className={pnlColor(r.sharpe)}>{fmt2(r.sharpe)}</span></p>
-                      <p className="text-muted">Max DD <span className="text-red-400">{r.maxDrawdown != null ? `${r.maxDrawdown.toFixed(1)}%` : '—'}</span></p>
-                      <p className="text-muted">Vol % <span className="text-ink2">{r.volatilityPct != null ? `${r.volatilityPct.toFixed(1)}%` : '—'}</span></p>
-                      <p className="text-muted">Alpha <span className={pnlColor(r.alpha)}>{r.alpha != null ? `${pnlSign(r.alpha)}${Math.abs(r.alpha).toFixed(1)}%` : '—'}</span></p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="hidden sm:block overflow-x-auto">
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <table className="w-full text-xs min-w-[420px]">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="py-2 px-2 text-left text-muted font-semibold">Stock</th>
+                    <th className="py-1.5 px-2 text-left text-muted font-semibold">Stock</th>
                     {['Beta', 'Sharpe', 'Max DD', 'Vol %', 'Alpha'].map(h => (
-                      <th key={h} className="py-2 px-2 text-center text-muted font-semibold">{h}</th>
+                      <th key={h} className="py-1.5 px-2 text-center text-muted font-semibold">{h}</th>
                     ))}
                   </tr>
                 </thead>
