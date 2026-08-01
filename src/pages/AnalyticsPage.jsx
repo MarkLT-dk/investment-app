@@ -144,6 +144,60 @@ export default function AnalyticsPage() {
     return Object.keys(out).length ? out : mockRiskMetrics
   }, [liveData])
 
+  // Correlation matrix from weekly returns
+  const corrMatrix = useMemo(() => {
+    if (selected.length < 2) return null
+
+    const weeks = period.weeks
+    const returnSeries = {}
+
+    if (liveData?.tickerSummary) {
+      for (const ticker of selected) {
+        const s = liveData.tickerSummary[ticker]
+        if (!s?.weeklyCloses?.length) continue
+        const closes = s.weeklyCloses.slice(-(weeks + 1))
+        if (closes.length < 2) continue
+        const rets = []
+        for (let i = 1; i < closes.length; i++) {
+          rets.push((closes[i] - closes[i - 1]) / closes[i - 1])
+        }
+        returnSeries[ticker] = rets
+      }
+    } else {
+      const hist = generateFallbackHistory(selected).slice(-weeks)
+      for (const ticker of selected) {
+        const vals = hist.map(row => row[ticker]).filter(v => v != null)
+        if (vals.length < 2) continue
+        const rets = []
+        for (let i = 1; i < vals.length; i++) rets.push(vals[i] - vals[i - 1])
+        returnSeries[ticker] = rets
+      }
+    }
+
+    const matrix = {}
+    for (const ta of selected) {
+      matrix[ta] = {}
+      for (const tb of selected) {
+        if (ta === tb) { matrix[ta][tb] = 1; continue }
+        const a = returnSeries[ta], b = returnSeries[tb]
+        if (!a?.length || !b?.length) { matrix[ta][tb] = null; continue }
+        const len  = Math.min(a.length, b.length)
+        const ax   = a.slice(-len), bx = b.slice(-len)
+        const mA   = ax.reduce((s, v) => s + v, 0) / len
+        const mB   = bx.reduce((s, v) => s + v, 0) / len
+        let num = 0, dA = 0, dB = 0
+        for (let i = 0; i < len; i++) {
+          const da = ax[i] - mA, db = bx[i] - mB
+          num += da * db; dA += da * da; dB += db * db
+        }
+        matrix[ta][tb] = dA === 0 || dB === 0
+          ? null
+          : Math.max(-1, Math.min(1, num / Math.sqrt(dA * dB)))
+      }
+    }
+    return matrix
+  }, [selected, period, liveData])
+
   // Return data per ticker (for table + scatter)
   const returnMap = useMemo(() => {
     const base = Object.fromEntries(
@@ -311,6 +365,18 @@ export default function AnalyticsPage() {
         </div>
       </Card>
 
+      {/* Correlation matrix */}
+      <Card>
+        <div className="flex items-center justify-between mb-1">
+          <CardTitle>Return Correlation ({period.label})</CardTitle>
+          <PeriodSelector selected={period} onChange={setPeriod} />
+        </div>
+        <p className="text-[11px] text-muted mb-4">
+          Based on weekly returns. <span className="text-blue-400">Blue</span> = moves opposite (diversifying), <span className="text-red-400">red</span> = moves together.
+        </p>
+        <CorrelationMatrix tickers={selected} matrix={corrMatrix} allTickers={allTickers} colors={COLORS} />
+      </Card>
+
       {/* Fundamentals + Risk + Scatter */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
         <div className="space-y-4 sm:space-y-5">
@@ -420,6 +486,84 @@ export default function AnalyticsPage() {
           <CardTitle>Risk (Volatility %) vs Return (1Y %)</CardTitle>
           <ScatterPlot data={scatterData} />
         </Card>
+      </div>
+    </div>
+  )
+}
+
+function CorrelationMatrix({ tickers, matrix, allTickers, colors }) {
+  if (!matrix || tickers.length < 2) {
+    return (
+      <p className="py-6 text-center text-xs text-muted">Select at least 2 stocks to see correlations.</p>
+    )
+  }
+
+  function cellBg(c) {
+    if (c == null) return 'transparent'
+    if (c > 0) return `rgba(239,68,68,${(c * 0.6).toFixed(2)})`
+    return `rgba(59,130,246,${(-c * 0.6).toFixed(2)})`
+  }
+
+  function cellTextClass(c) {
+    if (c == null) return 'text-muted'
+    return Math.abs(c) > 0.55 ? 'text-white' : 'text-ink2'
+  }
+
+  function shortName(ticker) {
+    const info = allTickers.find(x => x.ticker === ticker)
+    const name = info?.name ?? ticker
+    return name.length > 12 ? name.slice(0, 11) + '…' : name
+  }
+
+  return (
+    <div>
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <table className="text-xs mx-auto">
+          <thead>
+            <tr>
+              <th className="py-2 pr-3 text-left min-w-[96px]" />
+              {tickers.map((t, i) => (
+                <th key={t} className="py-2 px-2 text-center font-semibold min-w-[72px] whitespace-nowrap" style={{ color: colors[i] }}>
+                  {shortName(t)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tickers.map((ta, i) => (
+              <tr key={ta}>
+                <td className="py-1.5 pr-3 font-semibold whitespace-nowrap" style={{ color: colors[i] }}>
+                  {shortName(ta)}
+                </td>
+                {tickers.map((tb, j) => {
+                  const isDiag = ta === tb
+                  const c = matrix[ta]?.[tb] ?? null
+                  return (
+                    <td
+                      key={tb}
+                      className={`py-1.5 px-2 text-center tabular-nums font-semibold rounded
+                        ${isDiag ? 'text-muted' : cellTextClass(c)}`}
+                      style={{ background: isDiag ? 'var(--color-surface-2)' : cellBg(c) }}
+                      title={isDiag ? ta : `${ta} / ${tb}: ${c != null ? c.toFixed(3) : '—'}`}
+                    >
+                      {isDiag ? '—' : c != null ? c.toFixed(2) : '—'}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center justify-center gap-5 mt-4 text-[10px] text-muted">
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded inline-block" style={{ background: 'rgba(59,130,246,0.55)' }} />
+          Negative — diversifying
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded inline-block" style={{ background: 'rgba(239,68,68,0.55)' }} />
+          Positive — correlated
+        </div>
       </div>
     </div>
   )
