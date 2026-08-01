@@ -543,7 +543,7 @@ export default function AnalyticsPage() {
               </thead>
               <tbody>
                 {allTickers
-                  .filter(t => vsPortfolioCorr[t.ticker] != null)
+                  .filter(t => selected.includes(t.ticker) && vsPortfolioCorr[t.ticker] != null)
                   .sort((a, b) => vsPortfolioCorr[a.ticker] - vsPortfolioCorr[b.ticker])
                   .map(t => {
                     const c   = vsPortfolioCorr[t.ticker]
