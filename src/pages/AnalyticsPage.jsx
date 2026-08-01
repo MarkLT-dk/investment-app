@@ -144,6 +144,98 @@ export default function AnalyticsPage() {
     return Object.keys(out).length ? out : mockRiskMetrics
   }, [liveData])
 
+  // Portfolio-level weighted risk summary
+  const portfolioRisk = useMemo(() => {
+    const pos = livePos.length ? livePos : []
+    if (!pos.length) return null
+    const total = pos.reduce((s, p) => s + (p.currentValueDkk ?? 0), 0)
+    if (!total) return null
+
+    let wBeta = 0, wVol = 0, wSharpe = 0, wDD = 0
+    let nBeta = 0, nVol = 0, nSharpe = 0, nDD = 0
+    for (const p of pos) {
+      const w = (p.currentValueDkk ?? 0) / total
+      const r = riskMap[p.ticker] ?? {}
+      if (r.beta          != null) { wBeta   += w * r.beta;          nBeta++   }
+      if (r.volatilityPct != null) { wVol    += w * r.volatilityPct; nVol++    }
+      if (r.sharpe        != null) { wSharpe += w * r.sharpe;        nSharpe++ }
+      if (r.maxDrawdown   != null) { wDD     += w * r.maxDrawdown;   nDD++     }
+    }
+    const hhi = pos.reduce((s, p) => {
+      const w = (p.currentValueDkk ?? 0) / total; return s + w * w
+    }, 0)
+    const largest = [...pos].sort((a, b) => (b.currentValueDkk ?? 0) - (a.currentValueDkk ?? 0))[0]
+    return {
+      beta:        nBeta   ? wBeta   : null,
+      vol:         nVol    ? wVol    : null,
+      sharpe:      nSharpe ? wSharpe : null,
+      maxDD:       nDD     ? wDD     : null,
+      hhi,
+      nPositions:  pos.length,
+      largestName: largest?.name ?? largest?.ticker ?? '—',
+      largestPct:  largest ? (largest.currentValueDkk ?? 0) / total * 100 : null,
+    }
+  }, [livePos, riskMap])
+
+  // Pearson helper (shared)
+  function pearson(a, b) {
+    const n = Math.min(a.length, b.length)
+    if (n < 4) return null
+    const ax = a.slice(-n), bx = b.slice(-n)
+    const mA = ax.reduce((s, v) => s + v, 0) / n
+    const mB = bx.reduce((s, v) => s + v, 0) / n
+    let num = 0, dA = 0, dB = 0
+    for (let i = 0; i < n; i++) {
+      const da = ax[i] - mA, db = bx[i] - mB
+      num += da * db; dA += da * da; dB += db * db
+    }
+    return dA === 0 || dB === 0 ? null : Math.max(-1, Math.min(1, num / Math.sqrt(dA * dB)))
+  }
+
+  // Correlation of every portfolio+watchlist ticker vs the portfolio return series
+  const vsPortfolioCorr = useMemo(() => {
+    const pos = livePos.length ? livePos : []
+    if (!pos.length || !liveData?.tickerSummary) return {}
+    const weeks = period.weeks
+    const total = pos.reduce((s, p) => s + (p.currentValueDkk ?? 0), 0)
+    if (!total) return {}
+
+    // Build per-position weekly return series
+    const posRets = {}
+    let portLen = Infinity
+    for (const p of pos) {
+      const s = liveData.tickerSummary[p.ticker]
+      if (!s?.weeklyCloses?.length) continue
+      const closes = s.weeklyCloses.slice(-(weeks + 1))
+      if (closes.length < 2) continue
+      const rets = []
+      for (let i = 1; i < closes.length; i++) rets.push((closes[i] - closes[i-1]) / closes[i-1])
+      posRets[p.ticker] = { rets, w: (p.currentValueDkk ?? 0) / total }
+      portLen = Math.min(portLen, rets.length)
+    }
+    if (!Object.keys(posRets).length || portLen === Infinity) return {}
+
+    // Weighted portfolio return series
+    const portRets = Array(portLen).fill(0)
+    for (const { rets, w } of Object.values(posRets)) {
+      rets.slice(-portLen).forEach((r, i) => { portRets[i] += w * r })
+    }
+
+    // Correlate every ticker vs portfolio
+    const result = {}
+    for (const { ticker } of allTickers) {
+      const s = liveData.tickerSummary[ticker]
+      if (!s?.weeklyCloses?.length) continue
+      const closes = s.weeklyCloses.slice(-(weeks + 1))
+      if (closes.length < 2) continue
+      const rets = []
+      for (let i = 1; i < closes.length; i++) rets.push((closes[i] - closes[i-1]) / closes[i-1])
+      const c = pearson(rets, portRets)
+      if (c != null) result[ticker] = c
+    }
+    return result
+  }, [allTickers, liveData, livePos, period])
+
   // Correlation matrix from weekly returns
   const corrMatrix = useMemo(() => {
     if (selected.length < 2) return null
@@ -265,6 +357,59 @@ export default function AnalyticsPage() {
         </InsightCallout>
       )}
 
+      {/* Portfolio Risk Summary */}
+      {portfolioRisk && (
+        <Card>
+          <CardTitle>Portfolio Risk Summary (1Y, weight-adjusted)</CardTitle>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+            {[
+              {
+                label: 'Weighted Beta',
+                value: portfolioRisk.beta != null ? portfolioRisk.beta.toFixed(2) : '—',
+                sub: 'Market sensitivity',
+                color: portfolioRisk.beta == null ? 'text-ink' : portfolioRisk.beta > 1.2 ? 'text-yellow-400' : portfolioRisk.beta < 0.8 ? 'text-green-400' : 'text-ink',
+              },
+              {
+                label: 'Weighted Volatility',
+                value: portfolioRisk.vol != null ? `${portfolioRisk.vol.toFixed(1)}%` : '—',
+                sub: 'Annualised',
+                color: portfolioRisk.vol == null ? 'text-ink' : portfolioRisk.vol > 25 ? 'text-red-400' : portfolioRisk.vol > 15 ? 'text-yellow-400' : 'text-green-400',
+              },
+              {
+                label: 'Weighted Sharpe',
+                value: portfolioRisk.sharpe != null ? portfolioRisk.sharpe.toFixed(2) : '—',
+                sub: 'Risk-adjusted return',
+                color: portfolioRisk.sharpe == null ? 'text-ink' : portfolioRisk.sharpe > 1 ? 'text-green-400' : portfolioRisk.sharpe > 0.5 ? 'text-yellow-400' : 'text-red-400',
+              },
+              {
+                label: 'Avg Max Drawdown',
+                value: portfolioRisk.maxDD != null ? `${portfolioRisk.maxDD.toFixed(1)}%` : '—',
+                sub: 'Weighted average',
+                color: portfolioRisk.maxDD == null ? 'text-ink' : portfolioRisk.maxDD > 30 ? 'text-red-400' : portfolioRisk.maxDD > 15 ? 'text-yellow-400' : 'text-green-400',
+              },
+              {
+                label: 'Positions',
+                value: portfolioRisk.nPositions,
+                sub: `HHI ${portfolioRisk.hhi.toFixed(3)}`,
+                color: portfolioRisk.hhi > 0.2 ? 'text-yellow-400' : portfolioRisk.hhi > 0.1 ? 'text-ink' : 'text-green-400',
+              },
+              {
+                label: 'Largest Position',
+                value: portfolioRisk.largestPct != null ? `${portfolioRisk.largestPct.toFixed(1)}%` : '—',
+                sub: portfolioRisk.largestName,
+                color: portfolioRisk.largestPct > 25 ? 'text-yellow-400' : 'text-ink',
+              },
+            ].map(({ label, value, sub, color }) => (
+              <div key={label} className="bg-surface-2 rounded-lg px-3 py-2.5">
+                <p className="text-[11px] text-muted mb-1">{label}</p>
+                <p className={`text-sm font-bold tabular-nums ${color}`}>{value}</p>
+                {sub && <p className="text-[10px] text-muted mt-0.5 truncate">{sub}</p>}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Ticker selector */}
       <Card>
         <CardTitle>Select stocks to compare (max 6 — portfolio &amp; watchlist)</CardTitle>
@@ -376,6 +521,69 @@ export default function AnalyticsPage() {
         </p>
         <CorrelationMatrix tickers={selected} matrix={corrMatrix} allTickers={allTickers} colors={COLORS} />
       </Card>
+
+      {/* Correlation vs Portfolio */}
+      {Object.keys(vsPortfolioCorr).length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between mb-1">
+            <CardTitle>Correlation vs Portfolio ({period.label})</CardTitle>
+            <PeriodSelector selected={period} onChange={setPeriod} />
+          </div>
+          <p className="text-[11px] text-muted mb-4">
+            How closely each stock moves with your overall weighted portfolio. Low = more diversifying.
+          </p>
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+            <table className="w-full text-xs min-w-[400px]">
+              <thead>
+                <tr className="border-b border-border">
+                  {['Stock', 'Type', 'Correlation', ''].map(h => (
+                    <th key={h} className="py-2 px-2 text-left text-muted font-semibold first:pl-0">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {allTickers
+                  .filter(t => vsPortfolioCorr[t.ticker] != null)
+                  .sort((a, b) => vsPortfolioCorr[a.ticker] - vsPortfolioCorr[b.ticker])
+                  .map(t => {
+                    const c   = vsPortfolioCorr[t.ticker]
+                    const pct = Math.abs(c) * 100
+                    const barColor = c >= 0 ? 'rgba(239,68,68,0.55)' : 'rgba(59,130,246,0.55)'
+                    const textColor = c > 0.6 ? 'text-red-400' : c < -0.1 ? 'text-blue-400' : 'text-ink2'
+                    return (
+                      <tr key={t.ticker} className="border-b border-border last:border-0 hover:bg-surface-2 transition-colors">
+                        <td className="py-2.5 px-2 first:pl-0">
+                          <p className="font-medium text-ink">{t.name}</p>
+                          <p className="text-muted font-mono text-[11px] mt-0.5">{t.ticker}</p>
+                        </td>
+                        <td className="py-2.5 px-2">
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                            t.badge === 'Portfolio'
+                              ? 'bg-blue-950/40 border-blue-800/30 text-blue-300'
+                              : 'bg-surface-2 border-border text-muted'
+                          }`}>
+                            {t.badge}
+                          </span>
+                        </td>
+                        <td className={`py-2.5 px-2 tabular-nums font-semibold ${textColor}`}>
+                          {c.toFixed(2)}
+                        </td>
+                        <td className="py-2.5 px-2 w-32">
+                          <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full"
+                              style={{ width: `${pct}%`, background: barColor }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Fundamentals + Risk + Scatter */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
